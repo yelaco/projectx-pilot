@@ -1,0 +1,24 @@
+[Unit]
+Description=Named Cloudflare tunnel for local webhook notifications
+Wants=projectx-webhook.service
+After=projectx-webhook.service
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/cloudflared tunnel --no-autoupdate --loglevel error run --token-file %h/.config/projectx-bot/cloudflared-token
+UMask=0077
+Restart=on-failure
+RestartSec=15
+TimeoutStopSec=40
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,8 @@
+.env
+config/local.yaml
+/bin/
+*.db
+*.db-shm
+*.db-wal
+
+/var/

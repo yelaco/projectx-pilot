@@ -1,0 +1,29 @@
+[Unit]
+Description=ProjectX alert inbox ingress only (no execution)
+After=projectx-bot.service
+PartOf=projectx-bot.service
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/projectx-webhook -enabled -listen 127.0.0.1:8090 -state %h/.local/share/projectx-bot -managed-config %h/.local/share/projectx-bot/ingress.json
+UnsetEnvironment=WEBHOOK_DELIVERY_TOKEN
+UnsetEnvironment=PROJECTX_USERNAME PROJECTX_API_KEY BOT_DASHBOARD_TOKEN
+WorkingDirectory=%h/.local/share/projectx-bot
+UMask=0077
+Restart=on-failure
+RestartSec=15
+TimeoutStopSec=10
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%h/.local/share/projectx-bot
+InaccessiblePaths=-%h/.local/share/projectx-bot/credentials.json -%h/.local/share/projectx-bot/admin-password -%h/.config/projectx-bot/environment -%h/.local/share/projectx-bot/admins.json -%h/.local/share/projectx-bot/execution.db -%h/.local/share/projectx-bot/execution.json -%h/.local/share/projectx-bot/execution.lock
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=default.target

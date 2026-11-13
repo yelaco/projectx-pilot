@@ -1,0 +1,11 @@
+# Default is read-only. Enable locally approved Practice execution in the admin page.
+# manual-approval additionally requires private execution settings and local arming.
+mode: read-only
+account_id: 0 # 0 discovers accounts without selecting one; choose an explicit ID
+allowed_instruments: [MNQ, MGC]
+request_timeout: 10s
+refresh_interval: 60s
+dashboard_listen: 127.0.0.1:8080
+log_level: info
+
+signal_max_age: 5m # import and manual execution freshness; not execution authorization

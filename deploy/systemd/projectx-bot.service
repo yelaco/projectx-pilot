@@ -1,0 +1,26 @@
+[Unit]
+Description=Local ProjectX trading manager (disarmed on startup)
+Wants=projectx-webhook.service
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+ExecStart=%h/.local/bin/projectx-bot -config %h/.config/projectx-bot/config.yaml -state %h/.local/share/projectx-bot
+EnvironmentFile=-%h/.config/projectx-bot/environment
+WorkingDirectory=%h/.local/share/projectx-bot
+UMask=0077
+Restart=on-failure
+RestartSec=15
+TimeoutStopSec=15
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=%h/.local/share/projectx-bot %h/.config/projectx-bot
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=default.target
