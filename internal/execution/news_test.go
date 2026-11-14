@@ -85,3 +85,21 @@ func TestNewsEntryGateAndProtection(t *testing.T) {
 		})
 	}
 }
+
+func TestMissingNewsDoesNotOverrideManualOperationRules(t *testing.T) {
+	e, api, _, _, c, p, a, s, _ := fixture(t)
+	c.NewsFilter = "us_fomc"
+	if err := e.Arm(context.Background(), c, p, a); err != nil {
+		t.Fatal(err)
+	}
+	preview, err := e.PrepareOrder(context.Background(), s, "mnq", 1, 1)
+	if err != nil {
+		t.Fatal("missing calendar blocked preview", err)
+	}
+	if err := e.SetOperationPlan([]string{"2026-11-13"}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.Submit(context.Background(), preview.Token); err == nil || len(api.requests) != 0 {
+		t.Fatal("missing calendar bypassed manual day block")
+	}
+}

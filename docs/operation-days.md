@@ -16,8 +16,8 @@ shows inherited general/news reasons as well as that scope's manual choice.
 This only restricts entry eligibility: enabled cards do not guarantee market
 hours, account permission, fresh data or sufficient risk. Existing session/holiday
 rules still apply. FOMC blocks come only from the automatically refreshed Forex
-Factory weekly feed. Missing/stale week coverage blocks entries while enabled;
-future weeks may not yet be published. See [news filter](news-filter.md).
+Factory weekly feed. Missing/stale coverage is informational and does not itself
+block entries; known cached event blocks remain. Future weeks may not yet be published. See [news filter](news-filter.md).
 
 Choices are specific dates, not recurring weekdays. Saving one week/scope
 preserves other weeks and scopes. A new week has weekdays enabled unless blocked

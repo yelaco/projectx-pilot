@@ -11,6 +11,7 @@ import (
 
 type OperationDay struct {
 	Date, Name, Reason           string
+	NewsWarning                  string
 	Manual, News, Weekend, Today bool
 	General                      bool
 }
@@ -66,6 +67,9 @@ func (m *Manager) operationDaysLocked(value, id string) (OperationWeek, error) {
 					d.General = true
 				}
 			}
+		}
+		if m.c.NewsFilter != "off" {
+			d.NewsWarning = m.news.CoverageWarning(date)
 		}
 		if err := m.news.DayAllowed(date, m.c.NewsFilter); err != nil {
 			d.News = true

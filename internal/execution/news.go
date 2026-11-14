@@ -13,11 +13,14 @@ func (e *Engine) SetNewsCalendar(calendar NewsCalendar) {
 	e.newsCalendar = calendar
 }
 func (e *Engine) newsAllowed(at time.Time, mode string) error {
+	if mode != "" && mode != "us_fomc" && mode != "off" {
+		return errors.New("unknown news filter; entries blocked")
+	}
 	if mode == "off" {
 		return nil
 	}
 	if e.newsCalendar == nil {
-		return errors.New("Forex Factory news calendar unavailable; entries blocked")
+		return nil
 	}
 	return e.newsCalendar.EntryAllowed(at, mode)
 }

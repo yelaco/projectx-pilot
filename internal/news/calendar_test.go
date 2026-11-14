@@ -51,8 +51,8 @@ func TestFeedPolicyDaysAndRestart(t *testing.T) {
 		event("Bank Holiday", "All", "2026-12-10T00:00:00-05:00"),
 	}
 	c, now, calls := fakeCalendar(t, events)
-	if c.EntryAllowed(*now, "us_fomc") == nil {
-		t.Fatal("missing feed allowed entries")
+	if c.EntryAllowed(*now, "us_fomc") != nil {
+		t.Fatal("missing feed blocked entries")
 	}
 	if err := c.Refresh(context.Background()); err != nil {
 		t.Fatal(err)
@@ -64,7 +64,7 @@ func TestFeedPolicyDaysAndRestart(t *testing.T) {
 		{"2026-12-08T16:59:59", false}, {"2026-12-08T17:00:00", true},
 		{"2026-12-09T16:59:59", true}, {"2026-12-09T17:00:00", false},
 		{"2026-12-07T09:00:00", false}, {"2026-12-08T09:00:00", false},
-		{"2026-12-14T09:00:00", true},
+		{"2026-12-14T09:00:00", false},
 	} {
 		at, _ := time.ParseInLocation("2006-01-02T15:04:05", tc.at, session.Chicago)
 		for _, zone := range []*time.Location{time.UTC, time.FixedZone("laptop", 7*3600)} {
@@ -91,14 +91,17 @@ func TestFeedPolicyDaysAndRestart(t *testing.T) {
 		t.Fatal("cache permissions", err)
 	}
 	*now = now.Add(73 * time.Hour)
-	if restored.DayAllowed("2026-12-08", "") == nil {
-		t.Fatal("stale cache allowed entries")
+	if restored.DayAllowed("2026-12-08", "") != nil {
+		t.Fatal("stale cache blocked an unmatched date")
+	}
+	if restored.DayAllowed("2026-12-09", "") == nil || restored.CoverageWarning("2026-12-08") == "" {
+		t.Fatal("stale cache lost a known block or warning")
 	}
 	if restored.EntryAllowed(*now, "off") != nil {
 		t.Fatal("off did not disable gate")
 	}
 }
-func TestInvalidFeedFailsClosed(t *testing.T) {
+func TestInvalidFeedDoesNotCreateRestrictions(t *testing.T) {
 	valid := event("CPI m/m", "USD", "2026-12-09T08:30:00-05:00")
 	for _, tc := range []struct {
 		name, data string
@@ -120,8 +123,8 @@ func TestInvalidFeedFailsClosed(t *testing.T) {
 			if err := c.Refresh(context.Background()); err == nil {
 				t.Fatal("invalid feed accepted")
 			}
-			if c.Status().LastError == "" || c.DayAllowed("2026-12-08", "") == nil {
-				t.Fatal("failure silently enabled trading")
+			if c.Status().LastError == "" || c.DayAllowed("2026-12-08", "") != nil {
+				t.Fatal("failure suppressed error or blocked a date without data")
 			}
 		})
 	}

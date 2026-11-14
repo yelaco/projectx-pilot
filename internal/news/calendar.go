@@ -206,11 +206,7 @@ func (c *Calendar) DayAllowed(date, mode string) error {
 	defer c.mu.RUnlock()
 	snap, ok := c.snapshots[sourceWeek(d.Add(12*time.Hour))]
 	if !ok {
-		return errors.New("Forex Factory feed does not cover this trading date; entries blocked")
-	}
-	age := c.now().Sub(snap.FetchedAt)
-	if age > MaxAge || age < -5*time.Minute {
-		return errors.New("Forex Factory news cache stale; entries blocked")
+		return nil
 	}
 	for _, e := range snap.Events {
 		if e.Country != "USD" || session.CurrentTradingDate(e.Date) != date {
@@ -345,4 +341,24 @@ func (c *Calendar) Run(ctx context.Context, audit ...func(string, string)) {
 		}
 		timer.Reset(wait)
 	}
+}
+
+// CoverageWarning is informational. Missing/stale data alone never denies entries;
+// already cached matching policy events still apply until a valid refresh changes them.
+func (c *Calendar) CoverageWarning(date string) string {
+	d, err := time.ParseInLocation("2006-01-02", date, newYork)
+	if err != nil {
+		return "Invalid news date"
+	}
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	snap, ok := c.snapshots[sourceWeek(d.Add(12*time.Hour))]
+	if !ok {
+		return "No calendar data — no automatic news restriction for this date"
+	}
+	age := c.now().Sub(snap.FetchedAt)
+	if age > MaxAge || age < -5*time.Minute {
+		return "News cache stale — known event blocks retained; freshness warning only"
+	}
+	return ""
 }

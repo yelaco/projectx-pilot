@@ -49,7 +49,7 @@ func TestOperationDaysPageAndProtectedSave(t *testing.T) {
 		t.Fatal(w.Code, w.Body.String())
 	}
 	body := w.Body.String()
-	for _, text := range []string{"General plan", "First manager", "Forex Factory feed does not cover", "2026-12-05", "2026-12-11"} {
+	for _, text := range []string{"General plan", "First manager", "No calendar data", "2026-12-05", "2026-12-11"} {
 		if !strings.Contains(body, text) {
 			t.Fatal("missing", text)
 		}

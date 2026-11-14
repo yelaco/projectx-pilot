@@ -27,7 +27,9 @@ Only USD events matching these normalized titles block trading:
 
 FOMC member speeches, meeting minutes and the financial stability report are not
 included. Unknown USD titles containing FOMC invalidate the refresh for review,
-rather than silently dropping a possibly renamed policy event. Other economic
+rather than silently accepting a possibly renamed policy event. A rejected refresh
+retains existing cached data; if none is available, entries remain unrestricted
+by news, with an error and coverage warning displayed. Other economic
 releases/countries do not create news blocks. Impact alone does not classify FOMC.
 
 Each matched event blocks its Chicago trading date (events after 17:00 belong to
@@ -42,22 +44,24 @@ A validated source week with no matched policy events permits entry-day eligibil
 for that week; an empty/invalid response does not. The feed must span one source
 week and represent the current or immediately upcoming week at retrieval. Later
 weeks remain unavailable until published, including when planning at the weekend.
-Missing coverage or a cache older than 72 hours blocks new entries while enabled.
-A failed refresh keeps the last valid cache usable within that limit. No missing,
-stale, malformed, oversized, 403 or 429 response can clear a cached block or mean
-"no news". Calendar omissions not detectable from the feed remain a limitation:
+Missing coverage does not restrict entries: the news filter has no rule to apply
+for that date. A cache older than 72 hours produces a freshness warning, not a
+blanket entry block. Known cached matching event blocks remain active until a
+valid refresh updates them. A failed, malformed, oversized, 403 or 429 response
+does not erase a cached block or manufacture restrictions for uncovered dates. Calendar omissions not detectable from the feed remain a limitation:
 valid JSON cannot prove the publisher has included every real-world event.
 
 Up to three weekly snapshots persist atomically in private `news-calendar.json`
 with mode 0600. Restart loads validated snapshots but never restores arming or
 replays a signal. News refresh does not arm execution. Operation days shows source,
-last attempt/success, cached source weeks, per-day blocked/unavailable reasons,
+last attempt/success, cached source weeks, per-day event blocks and informational coverage warnings,
 last error and a protected Refresh news feed button. Refresh outcomes also appear
 in Activity; raw feed bodies and events are not logged.
 
 The gate applies before manual/automatic entry and again at submission. Blocked
 alerts are consumed, never queued for later. Working entry remainders cancel when
-the monitor observes a news block or unavailable coverage. Filled exposure retains
+the monitor observes a known news-event block. Missing/stale coverage alone does
+not cancel pending entries. Filled exposure retains
 Auto OCO, risk monitoring and scheduled flattening; a feed outage alone does not
 flatten it. The fixed 30-minute limit lifetime and earlier cutoffs remain active.
 News never overrides general or per-Trade Manager manual restrictions.

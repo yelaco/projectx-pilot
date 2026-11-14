@@ -41,7 +41,7 @@ func TestOperationPlansHierarchyAndPersistence(t *testing.T) {
 	if len(w.Days) != 7 || w.Days[0].Name != "Saturday" || w.Days[6].Name != "Friday" {
 		t.Fatal("week order")
 	}
-	if !w.Days[2].General || w.Days[2].Manual || !w.Days[3].News || !w.Days[4].News || !w.Days[5].Manual {
+	if !w.Days[2].General || w.Days[2].Manual || w.Days[3].News || w.Days[4].News || w.Days[3].NewsWarning == "" || !w.Days[5].Manual {
 		t.Fatal("inheritance or FOMC blocks missing", w.Days)
 	}
 	second, err := m.OperationDaysForManager("2026-12-05", "second")
