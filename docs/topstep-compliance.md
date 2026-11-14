@@ -11,3 +11,9 @@ Only confirmed PRAC simulated accounts are supported. Simplified Trade Managers 
 Start can remain active across reviewed sessions, with fresh reconciliation before each session. Closures and risk lockouts block entries. Pause, critical failures and process restart clear execution permission; monitoring and emergency management remain available. This cannot verify OS-level VPN, routing, device location or provider permission.
 
 See [automatic execution](automatic-execution.md) for actual supported behavior and calendar bounds. No live activation or orders were sent during development.
+
+2026-11-14 review: official API policy still requires personal-device order flow
+and prohibits remote-server automated triggers reaching order endpoints. Trade
+exit alerts are order flow too; local API requests alone do not establish remote
+trigger compliance. The application does not resolve or certify permission for
+this workflow. No service was armed/deployed while implementing exit alerts.

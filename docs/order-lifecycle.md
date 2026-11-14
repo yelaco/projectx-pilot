@@ -21,3 +21,9 @@ Scheduled closures use a `flattening` state and daily-loss closures use `risk-lo
 A read-only query of the operator's completed Practice test on 2026-11-13 showed a filled entry, stop and target sharing that entry's parent ID, with the target linked to the stop and no outgoing stop-to-target link. The original checker incorrectly required reciprocal links and closed that trade. Verification now accepts either direction of a single explicit sibling link or reciprocal links; it never infers OCO from prices alone. Any conflicting link, wrong parent/account scope/contract/side, non-open leg, duplicate observation, coverage mismatch or incorrect price distance still fails closed. Each leg must resolve to exactly one valid opposite-type sibling with matching remaining quantity.
 
 The first management trigger (`HaltReason`) and typed order observations (`HaltOrders`) are now captured durably before emergency handling. Progress messages and eventual flatness no longer hide the cause. The old closed record cannot reconstruct observations that were overwritten, so this change does not retrofit evidence or clear existing session lockouts. Restart/upgrade never restores arming or replays this order. Offline regression tests model the observed MGC layout, valid one-way/reciprocal links and invalid protection cases; the implementation fix was not validated by placing a live order.
+
+Trade-scoped TP/SL alerts use `flattening` with halt kind `signal_exit` and the
+existing durable one-attempt emergency mutation latch. Successful cancellation,
+position closing and two flat/no-order observations end in `closed` without a new
+session lock. An uncertain mutation locks/disarms and never replays. See
+[exit alert format and limits](tradingview-integration.md#trade-specific-tpsl-exit-alerts-implemented).

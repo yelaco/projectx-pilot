@@ -11,7 +11,8 @@ import (
 )
 
 // AutomationReceipt permanently consumes a delivery before any trading attempt.
-// Its ID matches the signal/intent ID, so a crash cannot authorize a replay.
+// Its ID matches the delivery signal ID (an exit references a separate entry
+// intent). A crash never authorizes replay.
 type AutomationReceipt struct{ ID, ProfileID, AccountID, ContractID, State, Message, UpdatedAt string }
 
 func (s *Inbox) automationSchema() error {
@@ -30,7 +31,7 @@ func (s *Inbox) ClaimAutomation(r AutomationReceipt) error {
 }
 func (s *Inbox) FinishAutomation(id, state, message string) error {
 	switch state {
-	case "submitted", "uncertain", "blocked", "interrupted":
+	case "submitted", "exit-requested", "uncertain", "blocked", "interrupted":
 	default:
 		return errors.New("invalid automation result")
 	}

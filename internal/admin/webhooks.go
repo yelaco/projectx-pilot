@@ -108,6 +108,7 @@ func (m *Manager) SaveMappings(id, mode string, shared, buy, sell ingress.PriceM
 
 type Template struct {
 	ProfileID, Symbol, URL, Buy, Sell string
+	BuyTP, BuySL, SellTP, SellSL      string
 	Ready                             bool
 	BuyReady, SellReady               bool
 }
@@ -133,10 +134,22 @@ func (m *Manager) Templates() []Template {
 				q := func(v string) string { b, _ := json.Marshal(v); return string(b) }
 				return fmt.Sprintf("{\n  \"delivery_token\": %s,\n  \"signal\": {\n    \"id\": %s,\n    \"strategy\": %s,\n    \"symbol\": %s,\n    \"direction\": %s,\n    \"entry\": %s,\n    \"stop_loss\": %s,\n    \"take_profit\": %s,\n    \"timestamp\": \"{{timenow}}\"\n  }\n}", q(r.Token), q(r.ID+"-"+symbol+"-"+strings.ToLower(direction)+"-{{time}}"), q(r.Strategy), q(symbol), q(direction), entry, stop, target)
 			}
+			exit := func(direction, action string) string {
+				body := struct {
+					Token  string            `json:"delivery_token"`
+					Signal map[string]string `json:"signal"`
+				}{r.Token, map[string]string{
+					"id":     r.ID + "-" + symbol + "-" + strings.ToLower(direction) + "-" + action + "-{{timenow}}",
+					"action": action, "trade_id": "<ORIGINAL_ENTRY_SIGNAL_ID>",
+					"strategy": r.Strategy, "symbol": symbol, "direction": direction, "timestamp": "{{timenow}}",
+				}}
+				b, _ := json.MarshalIndent(body, "", "  ")
+				return string(b)
+			}
 			url := urls[r.ID]
 			ready := func(p ingress.PriceMapping) bool { return p.Entry != "" && p.Stop != "" && p.Target != "" }
 			buyReady, sellReady := ready(r.Mapping("BUY")), ready(r.Mapping("SELL"))
-			out = append(out, Template{ProfileID: r.ID, Symbol: symbol, URL: url, Buy: build("BUY"), Sell: build("SELL"), Ready: buyReady && sellReady, BuyReady: buyReady, SellReady: sellReady})
+			out = append(out, Template{ProfileID: r.ID, Symbol: symbol, URL: url, Buy: build("BUY"), Sell: build("SELL"), BuyTP: exit("BUY", "tp"), BuySL: exit("BUY", "sl"), SellTP: exit("SELL", "tp"), SellSL: exit("SELL", "sl"), Ready: buyReady && sellReady, BuyReady: buyReady, SellReady: sellReady})
 		}
 	}
 	return out

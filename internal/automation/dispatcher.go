@@ -49,13 +49,13 @@ func (d Dispatcher) Process(ctx context.Context, b Binding, r storage.Record) er
 			return errors.New("automation delivery identity conflict")
 		}
 		if existing.State == "processing" {
-			// Recovery consumes the claim; absence of an intent proves no placement was
-			// possible, since the engine persists intent before transmitting the order.
+			// Recovery consumes the claim. Exit effects belong to the referenced
+			// entry intent, so absence of an exit-ID intent does not prove no mutation.
 			rows, err := d.Store.Executions()
 			if err != nil {
 				return err
 			}
-			state, message := "interrupted", "Processing was interrupted before a durable order intent; alert will not replay."
+			state, message := "interrupted", "Dispatch was interrupted; no replay. Inspect the execution monitor for the referenced trade."
 			for _, row := range rows {
 				if row.ID == r.Signal.ID {
 					state = "uncertain"
@@ -103,6 +103,18 @@ func (d Dispatcher) Process(ctx context.Context, b Binding, r storage.Record) er
 	}
 	if err = r.Signal.ValidateSchema(d.Now(), 5*time.Minute); err != nil {
 		return finish("blocked", err.Error())
+	}
+	if r.Signal.IsExit() {
+		exit, ok := d.Engine.(interface {
+			ExitAutomation(context.Context, string, signal.Signal, string) error
+		})
+		if !ok {
+			return finish("blocked", "Exit handling is unavailable.")
+		}
+		if err := exit.ExitAutomation(ctx, b.ProfileID, r.Signal, b.ContractID); err != nil {
+			return finish("blocked", err.Error())
+		}
+		return finish("exit-requested", "Exit alert consumed; follow the referenced trade for cancellation and flatness verification.")
 	}
 	err = d.Engine.ExecuteAutomation(ctx, b.ProfileID, r.Signal, b.ContractID, b.OrderType)
 	if err == nil {

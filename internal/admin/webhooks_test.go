@@ -3,6 +3,7 @@ package admin
 import (
 	"encoding/json"
 	"projectxbot/internal/ingress"
+	"projectxbot/internal/signal"
 	"strings"
 	"testing"
 	"time"
@@ -205,5 +206,33 @@ func TestSeparateMappingValidationAndIndependentReadiness(t *testing.T) {
 	after := m.Ingress().Routes[0]
 	if after.Token != before.Token || after.MappingMode != before.MappingMode || after.BuyMapping != before.BuyMapping || after.SellMapping != before.SellMapping {
 		t.Fatal("failed save mutated state")
+	}
+}
+
+func TestExitDraftRequiresOriginalEntryReference(t *testing.T) {
+	m, _, _, _ := setup(t)
+	if err := m.SaveAutomation(Automation{ID: "swift", Name: "Swift", Strategy: "swift-mnq-scalping", AccountID: 42, Instruments: []string{"MNQ"}, Source: "tradingview-manual"}); err != nil {
+		t.Fatal(err)
+	}
+	drafts := m.Templates()[0]
+	for _, draft := range []string{drafts.BuyTP, drafts.BuySL, drafts.SellTP, drafts.SellSL} {
+		now := time.Now().UTC()
+		text := strings.ReplaceAll(draft, "{{timenow}}", now.Format(time.RFC3339))
+		var body struct {
+			Signal signal.Signal `json:"signal"`
+		}
+		if err := json.Unmarshal([]byte(text), &body); err != nil {
+			t.Fatal(err)
+		}
+		if body.Signal.ValidateSchema(now, time.Minute) == nil {
+			t.Fatal("unconfigured reference accepted")
+		}
+		body.Signal.TradeID = "original-entry"
+		if err := body.Signal.ValidateSchema(now, time.Minute); err != nil {
+			t.Fatal(err)
+		}
+		if !body.Signal.IsExit() {
+			t.Fatal("draft is not an exit")
+		}
 	}
 }

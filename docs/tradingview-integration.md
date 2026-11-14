@@ -47,3 +47,66 @@ Future network delivery must remain a separate, disabled component subject to To
 Per-profile **Webhook & fields** now supports shared mappings or independent Buy/Sell entry, stop-loss and take-profit placeholders. Legacy profiles remain shared. Generated messages use the selected direction's exact mappings, with independent readiness warnings for incomplete drafts. Use the same entry placeholder in both separate sets when only stop/target plots differ. Save and recopy both messages into the appropriate TradingView alerts; existing alert message text is not updated remotely. See [mapping setup](admin-guide.md#shared-or-separate-buysell-field-mappings).
 
 [Automatic TradingView execution](automatic-execution.md) is now implemented with exact-profile routing, permanent delivery claims, real ProjectX write capability, fill/protection monitoring and crash reconciliation. It remains disabled by default and was tested only against mocks; no live account activation was performed.
+
+## Trade-specific TP/SL exit alerts (implemented)
+
+The same profile webhook accepts `action: "tp"` or `action: "sl"`.
+Omitting action (or using `entry`) retains the existing entry behavior.
+An exit carries its own unique `id` and a `trade_id` equal to the exact original
+entry signal `id`. Direction is the original BUY/SELL direction, not an opposite
+entry instruction. Account and contract come from the locally running profile;
+an alert cannot select them. Exit alerts omit all three price fields and metadata.
+
+```json
+{
+  "delivery_token": "YOUR_PROFILE_DELIVERY_TOKEN",
+  "signal": {
+    "id": "unique-exit-event-1",
+    "action": "tp",
+    "trade_id": "exact-original-entry-signal-id",
+    "strategy": "YOUR_STRATEGY",
+    "symbol": "MNQ",
+    "direction": "BUY",
+    "timestamp": "{{timenow}}"
+  }
+}
+```
+
+Profile → Messages includes BUY/SELL TP/SL drafts. The trade reference is an
+intentionally invalid placeholder until replaced. Your indicator/alert generator
+must retain the original entry ID (including its original bar timestamp when
+using the generated entry templates). Using `{{time}}` on the later exit bar does
+not recover the original entry ID. There is no unsafe "latest trade" fallback.
+Fixed TradingView messages cannot remember earlier alerts on their own. If your
+indicator cannot provide this reference, these exit drafts cannot be used safely
+without modifying its alert generation. No Pine/Swift indicator was changed here.
+
+A new exit needs the existing explicit local Start, exact profile/account/contract,
+fresh timestamp, original strategy/symbol/direction, and receipt after arming.
+The receiver persists it and the dispatcher durably claims it once. Review-only,
+paused/pre-arming, unknown-trade and expired deliveries cannot execute later.
+An exit referencing an already terminal trade or a latched exit is a no-op, even
+when another trade is active. Exits arriving before their entry has a durable
+managed intent are rejected; no future cancellation is scheduled.
+
+For a managed pending entry, cancel it. For a partial/full fill, cancel the entry
+remainder first, reconcile again for a racing fill, close the contract through
+ProjectX, verify flatness and remove only the referenced orphan brackets. OCO
+children stay in place while exposed. An ordinary exit refuses unrelated account
+orders or unexplained position size/direction. Do not manually add exposure to a
+bot-managed account: the API exposes net contract positions, not strategy lots.
+A successful exit is marked flattening then closed after two flat observations
+at least three seconds apart; it does not intentionally pause the running profile.
+The first trigger and observations remain in the execution record. Each exit
+latches the mutation attempt before network writes. An ambiguous cancellation,
+close, scope mismatch after mutation, or failed verification blocks entries and
+requires review; recovery never resends the exit. No opposite entry order is
+submitted. TP and SL actions use the same close/cancel behavior; a market close
+is not guaranteed at the signal's TP/SL price. Existing Auto OCO remains required.
+
+Verified API: [Close Positions](https://gateway.docs.projectx.com/docs/api-reference/positions/close-positions/)
+accepts accountId and contractId; existing cancellation and position/order search
+endpoints are reused. Ownership/matching rules above are application safeguards,
+not API strategy attribution. Tests use mocked HTTP receivers and gateways; no
+new live exit request has been performed. Keep operator responsibility for the
+exact remote-trigger workflow described in [compliance](topstep-compliance.md).

@@ -107,6 +107,9 @@ func (e *Engine) reconcile(ctx context.Context, i *Intent) error {
 				return nil
 			}
 			i.Message = "Account is observed flat; lockout remains for this session."
+			if i.HaltKind == "signal_exit" {
+				i.Message = "Signal exit verified flat."
+			}
 			if i.HaltKind == "session_close" {
 				i.Message = "Scheduled flatten verified flat."
 			}
@@ -363,9 +366,19 @@ func (e *Engine) flatten(ctx context.Context, i *Intent) error {
 	if err := e.persist(i); err != nil {
 		return err
 	}
+	if i.HaltKind == "signal_exit" {
+		if err := e.exitScope(ctx, i); err != nil {
+			return err
+		}
+	}
 	orders, err := e.api.OpenOrders(ctx, i.AccountID)
 	if err != nil {
 		return errors.New("emergency working-order read failed; use TopstepX immediately")
+	}
+	if i.HaltKind == "signal_exit" {
+		if err := scopedExitOrders(i, orders); err != nil {
+			return err
+		}
 	}
 	// Cancel entry parents before closing; preserve protective children while exposed.
 	for _, o := range orders {
@@ -384,9 +397,25 @@ func (e *Engine) flatten(ctx context.Context, i *Intent) error {
 			return errors.New("entry still working; use TopstepX immediately")
 		}
 	}
+	if i.HaltKind == "signal_exit" {
+		if err := e.exitScope(ctx, i); err != nil {
+			return err
+		}
+	}
 	positions, err := e.api.OpenPositions(ctx, i.AccountID)
 	if err != nil {
 		return errors.New("emergency position read failed; use TopstepX immediately")
+	}
+	if i.HaltKind == "signal_exit" {
+		if len(positions) != len(i.ObservedPositions) {
+			return errors.New("exit exposure changed; reconciliation required")
+		}
+		for n, p := range positions {
+			previous := i.ObservedPositions[n]
+			if p.ID != previous.ID || p.ContractID != previous.ContractID || p.Type != previous.Type || p.Size != previous.Size {
+				return errors.New("exit exposure changed; reconciliation required")
+			}
+		}
 	}
 	for _, p := range positions {
 		if err = e.api.CloseContract(ctx, p.ContractID); err != nil {
@@ -401,12 +430,23 @@ func (e *Engine) flatten(ctx context.Context, i *Intent) error {
 	if err != nil {
 		return errors.New("emergency orphan-order read failed")
 	}
+	if i.HaltKind == "signal_exit" {
+		if err := scopedExitOrders(i, remaining); err != nil {
+			return err
+		}
+	}
 	for _, o := range remaining {
+		if i.HaltKind == "signal_exit" && (o.ContractID != i.Contract.ID || o.ParentOrderID == nil || *o.ParentOrderID != i.OrderID) {
+			return errors.New("unrelated order prevents exit cleanup")
+		}
 		if err = e.api.Cancel(ctx, o.ID); err != nil {
 			return errors.New("emergency orphan cancellation unconfirmed; use TopstepX immediately")
 		}
 	}
 	i.Message = "Emergency requests sent; waiting for flatness verification."
+	if i.HaltKind == "signal_exit" {
+		i.Message = "Exit requests sent; waiting for flatness verification."
+	}
 	return e.persist(i)
 }
 func (e *Engine) Flatten(ctx context.Context) error {

@@ -19,17 +19,19 @@ import (
 )
 
 type mockAPI struct {
-	accounts        []projectx.Account
-	contract        projectx.Contract
-	orders          []projectx.Order
-	positions       []projectx.Position
-	history         []projectx.Order
-	trades          []projectx.Trade
-	requests        []projectx.PlaceRequest
-	placeErr        error
-	readErr         error
-	cancels, closes int
-	onPlace         func()
+	accounts            []projectx.Account
+	contract            projectx.Contract
+	orders              []projectx.Order
+	positions           []projectx.Position
+	history             []projectx.Order
+	trades              []projectx.Trade
+	requests            []projectx.PlaceRequest
+	placeErr            error
+	readErr             error
+	cancels, closes     int
+	onPlace             func()
+	onCancel            func()
+	cancelErr, closeErr error
 }
 
 func (m *mockAPI) Accounts(context.Context) ([]projectx.Account, error) { return m.accounts, m.readErr }
@@ -57,6 +59,12 @@ func (m *mockAPI) Place(_ context.Context, r projectx.PlaceRequest) (int64, erro
 }
 func (m *mockAPI) Cancel(_ context.Context, id int64) error {
 	m.cancels++
+	if m.onCancel != nil {
+		m.onCancel()
+	}
+	if m.cancelErr != nil {
+		return m.cancelErr
+	}
 	for n := range m.history {
 		if m.history[n].ID == id {
 			m.history[n].Status = 3
@@ -73,6 +81,9 @@ func (m *mockAPI) Cancel(_ context.Context, id int64) error {
 }
 func (m *mockAPI) CloseContract(context.Context, string) error {
 	m.closes++
+	if m.closeErr != nil {
+		return m.closeErr
+	}
 	m.positions = nil
 	return nil
 }
