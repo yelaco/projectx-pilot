@@ -13,6 +13,7 @@ import (
 )
 
 type Config struct {
+	NewsFilter         string        `yaml:"news_filter"`
 	SignalMaxAge       time.Duration `yaml:"signal_max_age"`
 	Mode               string        `yaml:"mode"`
 	AccountID          int64         `yaml:"account_id"`
@@ -26,7 +27,7 @@ type Config struct {
 type Secrets struct{ Username, APIKey, DashboardToken string }
 
 func Load(path string) (Config, error) {
-	c := Config{SignalMaxAge: 5 * time.Minute, Mode: "read-only", AllowedInstruments: []string{"MNQ", "MGC"}, RequestTimeout: 10 * time.Second, RefreshInterval: time.Minute, DashboardListen: "127.0.0.1:8080", LogLevel: "info"}
+	c := Config{NewsFilter: "us_fomc", SignalMaxAge: 5 * time.Minute, Mode: "read-only", AllowedInstruments: []string{"MNQ", "MGC"}, RequestTimeout: 10 * time.Second, RefreshInterval: time.Minute, DashboardListen: "127.0.0.1:8080", LogLevel: "info"}
 	f, err := os.Open(path)
 	if err != nil {
 		return c, err
@@ -52,6 +53,9 @@ func Load(path string) (Config, error) {
 }
 
 func (c Config) Validate() error {
+	if c.NewsFilter != "" && c.NewsFilter != "us_fomc" && c.NewsFilter != "off" {
+		return errors.New("news_filter must be us_fomc or off")
+	}
 	if c.Mode != "read-only" && c.Mode != "manual-approval" && c.Mode != "automated" {
 		return errors.New("mode must be read-only, manual-approval or automated")
 	}

@@ -55,3 +55,6 @@ For a permanent webhook hostname on this or another Arch laptop, use:
 Paste the named tunnel token at the hidden prompt. Cloudflare domain/tunnel/route creation is one-time; the installer saves the URL, disables Quick Tunnel, and starts a non-root named connector. Stop the old connector before switching machines; profiles/credentials still need local configuration and trading starts paused. See [named tunnel setup](docs/named-tunnel-setup.md).
 
 Automation profiles now accept webhook signals only in the dashboard. Practice execution is a separate API order test with no automation profile requirement: choose the saved Practice account/Trade Manager, an allowed active contract, quantity and stop/target ticks. Preview never transmits an order; approval submits through the same risk/protection/idempotency engine. Dashboard manual JSON signal import is retired; stored review history remains readable.
+
+US FOMC meeting-day entry filtering is enabled by default. Configure it in
+Settings → News filter; see [scope, reviewed schedule and limitations](docs/news-filter.md).

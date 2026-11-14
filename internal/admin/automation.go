@@ -59,7 +59,7 @@ func (m *Manager) automationResultsLocked() ([]storage.AutomationReceipt, error)
 				return nil, err
 			}
 		}
-		state, message := "interrupted", "Dispatch was interrupted; this alert will not replay. An exit may have affected its referenced trade; inspect execution monitoring."
+		state, message := "interrupted", "Dispatch ended before any durable order intent; this alert will not replay."
 		for _, i := range intents {
 			if i.ID == rows[n].ID {
 				state = "uncertain"
@@ -264,7 +264,7 @@ func (m *Manager) AutomationReadiness() (bool, string) {
 
 func (m *Manager) finishDeliveryLocked(remote *storage.Inbox, id, state string) error {
 	status := "rejected"
-	if state == "submitted" || state == "exit-requested" || state == "uncertain" {
+	if state == "submitted" || state == "uncertain" {
 		status = "reviewed"
 	}
 	if err := remote.Review(id, status); err != nil && !errors.Is(err, storage.ErrTransition) {

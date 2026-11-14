@@ -578,7 +578,7 @@ func handler(s *app.Service, token string, m *admin.Manager) http.Handler {
 				return
 			}
 			instruments := strings.FieldsFunc(strings.ToUpper(r.PostForm.Get("instruments")), func(r rune) bool { return r == ',' || r == ' ' || r == '\n' || r == '\t' })
-			err = m.Save(admin.Update{AccountID: account, Instruments: instruments, RefreshSeconds: seconds, Username: r.PostForm.Get("username"), APIKey: r.PostForm.Get("api_key"), ClearCredentials: r.PostForm.Get("clear_credentials") == "yes"})
+			err = m.Save(admin.Update{NewsFilter: r.PostForm.Get("news_filter"), AccountID: account, Instruments: instruments, RefreshSeconds: seconds, Username: r.PostForm.Get("username"), APIKey: r.PostForm.Get("api_key"), ClearCredentials: r.PostForm.Get("clear_credentials") == "yes"})
 			if err != nil {
 				render(w, 400, "", err.Error())
 				return

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -361,62 +360,5 @@ func TestMissingProtectionStopsContinuousRun(t *testing.T) {
 			t.Fatal("missing protection did not stop continuous run", s)
 		}
 		time.Sleep(time.Millisecond)
-	}
-}
-
-func TestExitWebhookDispatchIsIdempotentAndTradeScoped(t *testing.T) {
-	for _, direction := range []string{"BUY", "SELL"} {
-		t.Run(direction, func(t *testing.T) {
-			f := setup(t)
-			entry := f.alert(t, "original-entry", direction)
-			if err := f.dispatcher.Process(context.Background(), f.binding, entry); err != nil {
-				t.Fatal(err)
-			}
-			for n, trade := range []string{"different-entry", "original-entry"} {
-				id := fmt.Sprintf("exit-%d", n)
-				s := signal.Signal{ID: id, Action: "sl", TradeID: trade, Strategy: "swift", Symbol: "MNQ", Direction: direction, Timestamp: f.now()}
-				body, _ := json.Marshal(struct {
-					Token  string        `json:"delivery_token"`
-					Signal signal.Signal `json:"signal"`
-				}{strings.Repeat("x", 64), s})
-				w := httptest.NewRecorder()
-				req := httptest.NewRequest("POST", "http://127.0.0.1:8090/tradingview/swift", strings.NewReader(string(body)))
-				req.Header.Set("Content-Type", "application/json")
-				f.receiver.ServeHTTP(w, req)
-				if w.Code != 202 {
-					t.Fatal("exit rejected", w.Code, w.Body.String())
-				}
-				r, err := f.remote.Get(id)
-				if err != nil {
-					t.Fatal(err)
-				}
-				if err = f.dispatcher.Process(context.Background(), f.binding, r); err != nil {
-					t.Fatal(err)
-				}
-				result, err := f.store.AutomationReceipt(id)
-				if err != nil {
-					t.Fatal(err)
-				}
-				want := "blocked"
-				if n == 1 {
-					want = "exit-requested"
-				}
-				if result.State != want {
-					t.Fatal(result.State, result.Message)
-				}
-				if err = f.dispatcher.Process(context.Background(), f.binding, r); err != nil {
-					t.Fatal(err)
-				}
-				f.gateway.mu.Lock()
-				remaining := len(f.gateway.positions)
-				f.gateway.mu.Unlock()
-				if n == 0 && remaining != 1 || n == 1 && remaining != 0 {
-					t.Fatal("wrong trade affected", remaining)
-				}
-			}
-			if f.gateway.count() != 1 {
-				t.Fatal("exit created entry order")
-			}
-		})
 	}
 }

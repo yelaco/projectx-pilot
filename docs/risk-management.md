@@ -17,3 +17,7 @@ Existing profiles lacking `per_trade_only` retain their original limits until ex
 Offline tests cover cost-aware sizing, stop-distance changes, invalid risk amounts, removal of hidden daily/trade/floor caps for simplified profiles, no-floor setup/start, retained legacy behavior, durable policy on intents, exact-quantity rejection, protection checks, pause, and session/DST behavior. No live order was submitted to test this change.
 
 The signal-to-market deviation guard is optional through an authenticated execution-setting toggle. It defaults on; disabling it does not disable freshness, tick validation, stop/target direction, cost-aware sizing or any active-account/protection check. Zero ticks retains strict zero tolerance. Both Practice tickets and automatic webhook execution use the saved setting through the shared sizing engine. See [execution settings](manual-execution.md#optional-maximum-price-deviation).
+
+New entries also pass the default [US FOMC meeting-day filter](news-filter.md).
+It blocks both scheduled meeting-day trading sessions; it is not an economic
+calendar covering other releases. Existing position management remains active.

@@ -63,7 +63,7 @@ func TestAdminSettingsSecurityAndPersistence(t *testing.T) {
 	}
 	// Simulate a service restart after the browser loaded its form.
 	h = AdminHandler(s, token, "127.0.0.1:8080", m)
-	values := url.Values{"csrf": {match[1]}, "account_id": {"7"}, "instruments": {"mnq, mgc"}, "refresh_seconds": {"90"}, "username": {"local-user"}, "api_key": {"secret-key"}}
+	values := url.Values{"csrf": {match[1]}, "account_id": {"7"}, "instruments": {"mnq, mgc"}, "refresh_seconds": {"90"}, "news_filter": {"off"}, "username": {"local-user"}, "api_key": {"secret-key"}}
 	for _, tc := range []struct {
 		name, origin, csrf string
 		auth               bool
@@ -88,7 +88,7 @@ func TestAdminSettingsSecurityAndPersistence(t *testing.T) {
 		})
 	}
 	saved, err := config.Load(p)
-	if err != nil || saved.AccountID != 7 || len(saved.AllowedInstruments) != 2 {
+	if err != nil || saved.NewsFilter != "off" || saved.AccountID != 7 || len(saved.AllowedInstruments) != 2 {
 		t.Fatal("settings not saved", err)
 	}
 	w = httptest.NewRecorder()

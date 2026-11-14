@@ -133,7 +133,11 @@ func (m *Manager) reconcileContinuousLocked(ctx context.Context) error {
 		return nil
 	}
 	if status.Armed && status.Automated && status.AutomationProfileID == p.ID {
-		m.executor.SetRunMessage("Running · accepting eligible signals")
+		if err := session.NewsEntryAllowed(m.now(), m.c.NewsFilter); err != nil {
+			m.executor.SetRunMessage("Running · " + err.Error())
+		} else {
+			m.executor.SetRunMessage("Running · accepting eligible signals")
+		}
 		return nil
 	}
 	if !m.executor.CanConfigure() {

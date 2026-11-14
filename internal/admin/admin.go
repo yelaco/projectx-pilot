@@ -33,6 +33,7 @@ type Settings struct {
 	EnvironmentCredentials bool
 }
 type Update struct {
+	NewsFilter       string
 	AccountID        int64
 	Instruments      []string
 	RefreshSeconds   int
@@ -179,6 +180,9 @@ func (m *Manager) Save(u Update) error {
 	}
 	next := m.c
 	next.AccountID = u.AccountID
+	if u.NewsFilter != "" {
+		next.NewsFilter = u.NewsFilter
+	}
 	next.AllowedInstruments = u.Instruments
 	next.RefreshInterval = time.Duration(u.RefreshSeconds) * time.Second
 	if err := next.Validate(); err != nil {

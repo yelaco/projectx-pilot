@@ -9,3 +9,6 @@ dashboard_listen: 127.0.0.1:8080
 log_level: info
 
 signal_max_age: 5m # import and manual execution freshness; not execution authorization
+
+# Block both US FOMC meeting-day trading sessions; use off to disable.
+news_filter: us_fomc

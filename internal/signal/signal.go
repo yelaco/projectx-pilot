@@ -11,8 +11,6 @@ import (
 )
 
 type Signal struct {
-	Action     string            `json:"action,omitempty"`
-	TradeID    string            `json:"trade_id,omitempty"`
 	ID         string            `json:"id"`
 	Strategy   string            `json:"strategy"`
 	Symbol     string            `json:"symbol"`
@@ -85,29 +83,6 @@ func (s Signal) ValidateSchema(now time.Time, maxAge time.Duration) error {
 	if now.Sub(s.Timestamp) > maxAge {
 		return errors.New("signal has expired; do not reuse an old alert")
 	}
-	if s.Action != "" && s.Action != "entry" && !s.IsExit() {
-		return errors.New("action must be entry, tp or sl")
-	}
-	if s.IsExit() {
-		if s.TradeID == "" || s.TradeID == s.ID || len(s.TradeID) > 128 {
-			return errors.New("exit requires the original entry signal ID as trade_id")
-		}
-		for _, r := range s.TradeID {
-			if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || strings.ContainsRune("-_.:!", r)) {
-				return errors.New("invalid trade_id")
-			}
-		}
-		if s.Direction != "BUY" && s.Direction != "SELL" {
-			return errors.New("direction must match original entry BUY or SELL")
-		}
-		if s.Entry != 0 || s.StopLoss != 0 || s.TakeProfit != 0 || len(s.Metadata) != 0 {
-			return errors.New("exit signals must omit prices and metadata")
-		}
-		return nil
-	}
-	if s.TradeID != "" {
-		return errors.New("trade_id is only supported for exit signals")
-	}
 	for _, p := range []float64{s.Entry, s.StopLoss, s.TakeProfit} {
 		if p <= 0 || math.IsNaN(p) || math.IsInf(p, 0) {
 			return errors.New("prices must be finite and positive")
@@ -139,9 +114,6 @@ func (s Signal) ValidateSchema(now time.Time, maxAge time.Duration) error {
 // Validate also checks authoritative tick alignment; schema-only validation is
 // suitable for the unassigned delivery inbox, never execution.
 func (s Signal) Validate(now time.Time, maxAge time.Duration, tick float64) error {
-	if s.IsExit() {
-		return errors.New("exit signals cannot create entry orders")
-	}
 	if err := s.ValidateSchema(now, maxAge); err != nil {
 		return err
 	}
@@ -156,6 +128,3 @@ func (s Signal) Validate(now time.Time, maxAge time.Duration, tick float64) erro
 	}
 	return nil
 }
-
-// IsExit identifies a trade-scoped invalidation/close alert.
-func (s Signal) IsExit() bool { return s.Action == "tp" || s.Action == "sl" }

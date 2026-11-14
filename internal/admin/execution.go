@@ -168,6 +168,7 @@ func (m *Manager) armExecutionLocked(ctx context.Context, a execution.Authorizat
 		if p.ID == m.executionConfig.TradeManagerID {
 			c := m.executionConfig
 			c.SignalMaxAge = m.c.SignalMaxAge
+			c.NewsFilter = m.c.NewsFilter
 			next := m.c
 			next.Mode = "manual-approval"
 			if a.AutomationConfirmed {

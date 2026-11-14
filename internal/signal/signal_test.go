@@ -64,3 +64,11 @@ func TestTradingViewContinuousTickerInID(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestExitActionsAreUnsupported(t *testing.T) {
+	for _, action := range []string{"tp", "sl"} {
+		if _, err := Parse(`{"id":"exit","action":"` + action + `","strategy":"swift","symbol":"MNQ","timestamp":"2026-11-14T12:00:00Z"}`); err == nil {
+			t.Fatal("retired exit alert accepted")
+		}
+	}
+}

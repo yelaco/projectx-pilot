@@ -16,6 +16,7 @@ import (
 	"projectxbot/internal/projectx"
 	"projectxbot/internal/realtime"
 	"projectxbot/internal/risk"
+	"projectxbot/internal/session"
 	"projectxbot/internal/signal"
 	"projectxbot/internal/storage"
 )
@@ -294,6 +295,9 @@ func (e *Engine) check() error {
 	if why != "" {
 		e.disarm()
 		return fmt.Errorf("bot local session lock prevents entries: %s", why)
+	}
+	if err := session.NewsEntryAllowed(e.now(), e.config.NewsFilter); err != nil {
+		return err
 	}
 	if e.active() != nil {
 		return errors.New("an order or unresolved execution already exists")

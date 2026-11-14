@@ -45,6 +45,7 @@ type RunSetup struct {
 	ConfirmedAt      time.Time `json:"confirmed_at"`
 }
 type Config struct {
+	NewsFilter            string   `json:"news_filter,omitempty"`
 	DisablePriceDeviation bool     `json:"disable_price_deviation,omitempty"`
 	RunSetup              RunSetup `json:"run_setup"`
 	LastVerifiedFloor     float64  `json:"last_verified_floor,omitempty"`

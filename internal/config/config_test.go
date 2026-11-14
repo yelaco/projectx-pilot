@@ -17,12 +17,12 @@ func loadText(t *testing.T, text string) (Config, error) {
 }
 func TestDefaults(t *testing.T) {
 	c, err := loadText(t, "{}\n")
-	if err != nil || c.Mode != "read-only" || c.RequestTimeout != 10*time.Second {
+	if err != nil || c.NewsFilter != "us_fomc" || c.Mode != "read-only" || c.RequestTimeout != 10*time.Second {
 		t.Fatalf("%+v %v", c, err)
 	}
 }
 func TestUnsafeConfig(t *testing.T) {
-	for _, s := range []string{"mode: invalid", "mode: paper", "dashboard_listen: 0.0.0.0:8080", "dashboard_listen: localhost:8080", "dashboard_listen: 127.0.0.1:0", "request_timeout: 0s", "refresh_interval: 1s", "account_id: -1", "log_level: verbose", "unknown: true", "allowed_instruments: []", "allowed_instruments: [MNQ, MNQ]", "{}\n---\n{}", "mode: ["} {
+	for _, s := range []string{"news_filter: unsupported", "mode: invalid", "mode: paper", "dashboard_listen: 0.0.0.0:8080", "dashboard_listen: localhost:8080", "dashboard_listen: 127.0.0.1:0", "request_timeout: 0s", "refresh_interval: 1s", "account_id: -1", "log_level: verbose", "unknown: true", "allowed_instruments: []", "allowed_instruments: [MNQ, MNQ]", "{}\n---\n{}", "mode: ["} {
 		t.Run(s, func(t *testing.T) {
 			if _, err := loadText(t, s); err == nil {
 				t.Fatal("accepted unsafe config")
