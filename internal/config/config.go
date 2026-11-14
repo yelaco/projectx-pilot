@@ -10,18 +10,21 @@ import (
 	"time"
 
 	"gopkg.in/yaml.v3"
+	"projectxbot/internal/session"
 )
 
 type Config struct {
-	NewsFilter         string        `yaml:"news_filter"`
-	SignalMaxAge       time.Duration `yaml:"signal_max_age"`
-	Mode               string        `yaml:"mode"`
-	AccountID          int64         `yaml:"account_id"`
-	AllowedInstruments []string      `yaml:"allowed_instruments"`
-	RequestTimeout     time.Duration `yaml:"request_timeout"`
-	RefreshInterval    time.Duration `yaml:"refresh_interval"`
-	DashboardListen    string        `yaml:"dashboard_listen"`
-	LogLevel           string        `yaml:"log_level"`
+	TradeManagerNoTradeDates map[string][]string `yaml:"trade_manager_no_trade_dates,omitempty"`
+	NoTradeDates             []string            `yaml:"no_trade_dates,omitempty"`
+	NewsFilter               string              `yaml:"news_filter"`
+	SignalMaxAge             time.Duration       `yaml:"signal_max_age"`
+	Mode                     string              `yaml:"mode"`
+	AccountID                int64               `yaml:"account_id"`
+	AllowedInstruments       []string            `yaml:"allowed_instruments"`
+	RequestTimeout           time.Duration       `yaml:"request_timeout"`
+	RefreshInterval          time.Duration       `yaml:"refresh_interval"`
+	DashboardListen          string              `yaml:"dashboard_listen"`
+	LogLevel                 string              `yaml:"log_level"`
 }
 
 type Secrets struct{ Username, APIKey, DashboardToken string }
@@ -53,6 +56,31 @@ func Load(path string) (Config, error) {
 }
 
 func (c Config) Validate() error {
+	if len(c.TradeManagerNoTradeDates) > 50 {
+		return errors.New("maximum 50 manager operation plans")
+	}
+	total := len(c.NoTradeDates)
+	for id, dates := range c.TradeManagerNoTradeDates {
+		if len(id) < 1 || len(id) > 64 {
+			return errors.New("invalid Trade Manager operation ID")
+		}
+		for _, r := range id {
+			if !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '_' || r == '-') {
+				return errors.New("invalid Trade Manager operation ID")
+			}
+		}
+		if err := session.ValidateNoTradeDates(dates); err != nil {
+			return err
+		}
+		total += len(dates)
+	}
+	if total > 3000 {
+		return errors.New("maximum 3000 operation dates across all plans")
+	}
+
+	if err := session.ValidateNoTradeDates(c.NoTradeDates); err != nil {
+		return err
+	}
 	if c.NewsFilter != "" && c.NewsFilter != "us_fomc" && c.NewsFilter != "off" {
 		return errors.New("news_filter must be us_fomc or off")
 	}

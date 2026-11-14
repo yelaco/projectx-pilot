@@ -16,7 +16,7 @@ func setup(t *testing.T) (*Manager, string, string, string) {
 	t.Setenv("BOT_DASHBOARD_TOKEN", "")
 	dir := t.TempDir()
 	p := filepath.Join(dir, "config.yaml")
-	if err := os.WriteFile(p, []byte("{}\n"), 0600); err != nil {
+	if err := os.WriteFile(p, []byte("news_filter: off\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	c, err := config.Load(p)

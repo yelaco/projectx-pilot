@@ -59,6 +59,11 @@ func (m *Manager) openExecution() error {
 		store.Close()
 		return err
 	}
+	if err := engine.SetOperationPlan(m.c.NoTradeDates, m.c.TradeManagerNoTradeDates); err != nil {
+		store.Close()
+		return err
+	}
+	engine.SetNewsCalendar(m.news)
 	m.executionStore, m.executor = store, engine
 	return nil
 }
@@ -336,6 +341,11 @@ func (m *Manager) AcquireExecutionLease() error {
 		f.Close()
 		return err
 	}
+	if err := engine.SetOperationPlan(m.c.NoTradeDates, m.c.TradeManagerNoTradeDates); err != nil {
+		f.Close()
+		return err
+	}
+	engine.SetNewsCalendar(m.news)
 	m.executor = engine
 	m.executionLease = f
 	return nil

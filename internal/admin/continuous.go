@@ -133,7 +133,11 @@ func (m *Manager) reconcileContinuousLocked(ctx context.Context) error {
 		return nil
 	}
 	if status.Armed && status.Automated && status.AutomationProfileID == p.ID {
-		if err := session.NewsEntryAllowed(m.now(), m.c.NewsFilter); err != nil {
+		if err := session.OperationEntryAllowed(m.now(), m.c.NoTradeDates); err != nil {
+			m.executor.SetRunMessage("Running · " + err.Error())
+		} else if err := session.OperationEntryAllowed(m.now(), m.c.TradeManagerNoTradeDates[p.TradeManagerID]); err != nil {
+			m.executor.SetRunMessage("Running · Trade Manager operation day disabled")
+		} else if err := m.news.EntryAllowed(m.now(), m.c.NewsFilter); err != nil {
 			m.executor.SetRunMessage("Running · " + err.Error())
 		} else {
 			m.executor.SetRunMessage("Running · accepting eligible signals")

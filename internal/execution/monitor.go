@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"projectxbot/internal/projectx"
-	"projectxbot/internal/session"
 )
 
 // Run reconciles all recovered intents before any new arming is possible.
@@ -127,10 +126,14 @@ func (e *Engine) reconcile(ctx context.Context, i *Intent) error {
 	if i.OrderType == 1 {
 		entryMaxAge = 30 * time.Minute
 	}
-	newsErr := session.NewsEntryAllowed(e.now(), i.Config.NewsFilter)
-	if parent.FillVolume < parent.Size && (e.paused || newsErr != nil || !e.now().Before(i.Signal.Timestamp.Add(entryMaxAge)) || !e.now().Before(i.Window.LastEntry)) && parent.Status == 1 && !i.CancelAttempted {
+	newsErr := e.newsAllowed(e.now(), i.Config.NewsFilter)
+	operationErr := e.operationAllowed(e.now(), i.Config.TradeManagerID)
+	if parent.FillVolume < parent.Size && (e.paused || operationErr != nil || newsErr != nil || !e.now().Before(i.Signal.Timestamp.Add(entryMaxAge)) || !e.now().Before(i.Window.LastEntry)) && parent.Status == 1 && !i.CancelAttempted {
 		i.CancelAttempted = true
 		i.Message = "Entry cancellation requested: expiry, pause or session cutoff."
+		if operationErr != nil {
+			i.Message = "Entry cancellation requested: " + operationErr.Error()
+		}
 		if newsErr != nil {
 			i.Message = "Entry cancellation requested: " + newsErr.Error()
 		}

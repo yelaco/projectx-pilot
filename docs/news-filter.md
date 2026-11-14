@@ -1,46 +1,72 @@
-# US FOMC entry filter
+# Forex Factory US FOMC filter
 
-Implemented default: `news_filter: us_fomc`. Configure in Settings → ProjectX
-connection → News filter, or YAML. `off` explicitly disables it. Saving Settings
-pauses execution as usual; start locally after reviewing changes. Existing
-configurations without this field default to US FOMC filtering.
+Implemented default: `news_filter: us_fomc`. Configure on Operation days or
+Settings → News filter. `off` explicitly disables it. Saving policy changes pauses
+execution as usual; start locally after review. There is no embedded Fed schedule
+and no Fed-calendar fallback.
 
-Both days of every scheduled US Federal Reserve FOMC meeting are blocked. This
-is a conservative application policy, not a Topstep trading prohibition. It
-blocks the entire Chicago trading session for each meeting date, beginning at
-17:00 the prior evening. For December 8–9, 2026, for example, entries are blocked
-from December 7 at 17:00 through December 9 at 17:00 Chicago. Ordinary market-hours
-rules still apply independently; the filter clearing never guarantees an open
-market or permission to trade. UTC and laptop display time do not determine the
-meeting session. America/Chicago handles DST.
+Source: https://nfs.faireconomy.media/ff_calendar_thisweek.json
 
-The gate applies to both manual Practice tickets and automation, including a
-fresh check at submission. New automatic alerts are consumed as blocked outcomes,
-not queued to fire after the meeting. Continuous Start remains requested and its
-status explains the news block; existing calendar/risk reconciliation still gates
-future sessions. New entries need a fresh signal after the block.
+The native bot fetches the fixed HTTPS endpoint at startup and every six hours.
+Failures retry after thirty minutes; manual refresh and startup requests share a
+five-minute cooldown. No proxy or bridge was added to ProjectX execution. Fetches
+use a named User-Agent and 15-second timeout, reject redirects, bound response size
+to 1 MiB and validate the JSON/events before replacing the cache. Direct source
+fields were inspected during implementation: title, country, date (explicit UTC
+offset), impact, forecast and previous. A read-only Go-client live fetch succeeded.
+The feed has no application-level availability guarantee; successful access now
+does not guarantee future availability.
 
-Working entry remainders cancel if reconciliation observes a blocked/unknown news
-session. Filled exposure is not closed because of the news filter; protection,
-risk monitoring, emergency management and scheduled flattening continue. The
-30-minute limit lifetime and earlier session cutoffs remain active. Active intents
-persist their news-policy snapshot; Settings changes already pause execution and
-cancel outstanding remainders. Restart does not arm or replay entries.
+Only USD events matching these normalized titles block trading:
 
-The lightweight local date table is reviewed for 2026 and 2027 as of November 14,
-2026 (`session.NewsCalendarRevision`). Unknown years block entries with the filter
-on. Calendar changes require a reviewed application update; no feed/scraper or
-background external requests were added. Unscheduled meetings, newly revised dates,
-CPI, NFP, speeches, minutes-release dates and other countries are not detected.
-The 2027 dates are tentative and include the October strategy meeting; they do
-not establish that the separate trading-session calendar supports 2027.
+- FOMC Statement
+- FOMC Press Conference
+- FOMC Economic Projections
+- Federal Funds Rate
+- FOMC Rate Decision / FOMC Interest Rate Decision
 
-Official sources:
+FOMC member speeches, meeting minutes and the financial stability report are not
+included. Unknown USD titles containing FOMC invalidate the refresh for review,
+rather than silently dropping a possibly renamed policy event. Other economic
+releases/countries do not create news blocks. Impact alone does not classify FOMC.
 
-- [Federal Reserve meeting calendar](https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm)
-- [November 12, 2026 revised 2027 schedule](https://www.federalreserve.gov/newsevents/pressreleases/monetary20261112a.htm)
+Each matched event blocks its Chicago trading date (events after 17:00 belong to
+the next trading date), including the prior evening
+from 17:00. Only feed event dates are blocked: a two-day meeting's first day is NOT
+inferred from a second-day announcement. Timestamps are parsed with their supplied
+offset; source-week coverage uses Sunday–Saturday in America/New_York. This source
+week differs from the admin's Saturday–Friday planning view. Date conversion and
+session checks use America/Chicago and account for DST.
 
-Tests cover prior-evening boundaries, DST/time zones, both meeting days, the
-revised 2027 schedule, unknown years, explicit disabling, entry/submission gating,
-pending cancellation, protected filled positions and authenticated settings
-persistence. No live orders were sent during implementation.
+A validated source week with no matched policy events permits entry-day eligibility
+for that week; an empty/invalid response does not. The feed must span one source
+week and represent the current or immediately upcoming week at retrieval. Later
+weeks remain unavailable until published, including when planning at the weekend.
+Missing coverage or a cache older than 72 hours blocks new entries while enabled.
+A failed refresh keeps the last valid cache usable within that limit. No missing,
+stale, malformed, oversized, 403 or 429 response can clear a cached block or mean
+"no news". Calendar omissions not detectable from the feed remain a limitation:
+valid JSON cannot prove the publisher has included every real-world event.
+
+Up to three weekly snapshots persist atomically in private `news-calendar.json`
+with mode 0600. Restart loads validated snapshots but never restores arming or
+replays a signal. News refresh does not arm execution. Operation days shows source,
+last attempt/success, cached source weeks, per-day blocked/unavailable reasons,
+last error and a protected Refresh news feed button. Refresh outcomes also appear
+in Activity; raw feed bodies and events are not logged.
+
+The gate applies before manual/automatic entry and again at submission. Blocked
+alerts are consumed, never queued for later. Working entry remainders cancel when
+the monitor observes a news block or unavailable coverage. Filled exposure retains
+Auto OCO, risk monitoring and scheduled flattening; a feed outage alone does not
+flatten it. The fixed 30-minute limit lifetime and earlier cutoffs remain active.
+News never overrides general or per-Trade Manager manual restrictions.
+
+Unit tests use mock HTTP transports and cover schema/size/week validation, cached
+blocks, title matching, timezone/session boundaries, no-event eligibility, refresh
+errors, staleness, restart, concurrency, cancellation and entry/protection gates.
+An external read-only feed check is opt-in and never touches a trading endpoint:
+
+```sh
+PROJECTX_NEWS_INTEGRATION=1 go test -v ./internal/news -run '^TestForexFactoryIntegration$' -count=1
+```

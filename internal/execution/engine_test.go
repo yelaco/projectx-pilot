@@ -106,7 +106,7 @@ func fixture(t *testing.T) (*Engine, *mockAPI, *mockQuotes, *storage.Inbox, Conf
 	p.ID = "practice"
 	p.Name = "Practice"
 	p.AccountIDs = []int64{42}
-	c := Config{Enabled: true, AccountID: 42, TradeManagerID: p.ID, RoundTripCosts: 3, SlippageTicks: 2, MaxQuantity: 5, MaxDeviationTicks: 4}
+	c := Config{NewsFilter: "off", Enabled: true, AccountID: 42, TradeManagerID: p.ID, RoundTripCosts: 3, SlippageTicks: 2, MaxQuantity: 5, MaxDeviationTicks: 4}
 	a := Authorization{Window: session.Window{Start: now.Add(-time.Hour), LastEntry: time.Date(2026, 11, 13, 15, 0, 0, 0, session.Chicago), Flatten: time.Date(2026, 11, 13, 15, 5, 0, 0, session.Chicago), Verified: true}, Floor: 48000, PracticeConfirmed: true, BracketsConfirmed: true, FloorConfirmed: true, AccountName: "PRAC-test"}
 	s := signal.Signal{ID: "one", Strategy: "manual", Symbol: "MNQ", Direction: "BUY", Entry: 20000, StopLoss: 19990, TakeProfit: 20020, Timestamp: now}
 	return e, api, quote, store, c, p, a, s, &now

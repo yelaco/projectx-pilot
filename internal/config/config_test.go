@@ -42,3 +42,16 @@ func TestSecrets(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestInvalidOperationPlans(t *testing.T) {
+	for _, text := range []string{
+		"no_trade_dates: [2026-02-30]",
+		"no_trade_dates: ['2026-12-07', '2026-12-07']",
+		"trade_manager_no_trade_dates: {INVALID: ['2026-12-07']}",
+		"trade_manager_no_trade_dates: {first: [bad]}",
+	} {
+		if _, err := loadText(t, text); err == nil {
+			t.Fatal("invalid plan accepted", text)
+		}
+	}
+}

@@ -147,7 +147,7 @@ func setup(t *testing.T) *fixture {
 	f.policy.ID = "practice"
 	f.policy.Name = "Practice"
 	f.policy.AccountIDs = []int64{42}
-	f.config = execution.Config{Enabled: true, AccountID: 42, TradeManagerID: "practice", RoundTripCosts: 3, SlippageTicks: 2, MaxQuantity: 5, MaxDeviationTicks: 4, Automated: true, AutomationProfileID: "swift", AutomationContractID: "mnq"}
+	f.config = execution.Config{NewsFilter: "off", Enabled: true, AccountID: 42, TradeManagerID: "practice", RoundTripCosts: 3, SlippageTicks: 2, MaxQuantity: 5, MaxDeviationTicks: 4, Automated: true, AutomationProfileID: "swift", AutomationContractID: "mnq"}
 	window, _ := session.NormalWindow("2026-11-13")
 	window.Verified = true
 	f.auth = execution.Authorization{Window: window, Floor: 48000, AccountName: "PRAC-offline-test", PracticeConfirmed: true, BracketsConfirmed: true, FloorConfirmed: true, AutomationConfirmed: true}

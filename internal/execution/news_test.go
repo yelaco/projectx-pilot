@@ -2,6 +2,10 @@ package execution
 
 import (
 	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"projectxbot/internal/news"
 	"testing"
 	"time"
 
@@ -18,6 +22,14 @@ func TestNewsEntryGateAndProtection(t *testing.T) {
 			q.q.At = *now
 			a.Window, _ = session.NormalWindow("2026-12-08")
 			a.Window.Verified = true
+			cachePath := filepath.Join(t.TempDir(), "news.json")
+			raw := fmt.Sprintf(`{"version":1,"snapshots":[{"week":"2026-12-06","fetched_at":%q,"events":[{"title":"FOMC Statement","country":"USD","date":"2026-12-08T14:00:00-05:00","impact":"High"}]}]}`, now.UTC().Format(time.RFC3339))
+			if err := os.WriteFile(cachePath, []byte(raw), 0600); err != nil {
+				t.Fatal(err)
+			}
+			e.SetNewsCalendar(news.New(cachePath, nil, func() time.Time { return *now }))
+
+			c.NewsFilter = "us_fomc"
 			if mode != "entry-blocked" {
 				c.NewsFilter = "off"
 			}

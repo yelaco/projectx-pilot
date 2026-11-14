@@ -11,6 +11,8 @@ import (
 
 func pageInfo(path string) (name, nav, title, subtitle string) {
 	switch path {
+	case "/operation-days":
+		return "operation-days", "operation-days", "Operation days", "Plan Saturday–Friday trading weeks in America/Chicago."
 	case "/execution":
 		return "execution", "execution", "Practice execution", "Manual test orders on a pinned Practice account. Automatic trading is managed in its automation profile."
 	case "/":
@@ -56,6 +58,8 @@ func actionPage(path, id string) string {
 		return "/execution"
 	}
 	switch path {
+	case "/operation-days", "/news-refresh":
+		return "/operation-days"
 	case "/trade-manager":
 		if id != "" {
 			return "/trade-managers/profiles/" + id

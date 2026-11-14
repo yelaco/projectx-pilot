@@ -16,12 +16,14 @@ import (
 	"projectxbot/internal/projectx"
 	"projectxbot/internal/realtime"
 	"projectxbot/internal/risk"
-	"projectxbot/internal/session"
 	"projectxbot/internal/signal"
 	"projectxbot/internal/storage"
 )
 
 type Engine struct {
+	newsCalendar             NewsCalendar
+	managerOperationDays     map[string][]string
+	operationDays            []string
 	submissionDetail         *SubmissionDetail
 	runRequested             bool
 	runProfileID, runMessage string
@@ -296,7 +298,10 @@ func (e *Engine) check() error {
 		e.disarm()
 		return fmt.Errorf("bot local session lock prevents entries: %s", why)
 	}
-	if err := session.NewsEntryAllowed(e.now(), e.config.NewsFilter); err != nil {
+	if err := e.operationAllowed(e.now(), e.config.TradeManagerID); err != nil {
+		return err
+	}
+	if err := e.newsAllowed(e.now(), e.config.NewsFilter); err != nil {
 		return err
 	}
 	if e.active() != nil {

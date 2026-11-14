@@ -19,5 +19,5 @@ Offline tests cover cost-aware sizing, stop-distance changes, invalid risk amoun
 The signal-to-market deviation guard is optional through an authenticated execution-setting toggle. It defaults on; disabling it does not disable freshness, tick validation, stop/target direction, cost-aware sizing or any active-account/protection check. Zero ticks retains strict zero tolerance. Both Practice tickets and automatic webhook execution use the saved setting through the shared sizing engine. See [execution settings](manual-execution.md#optional-maximum-price-deviation).
 
 New entries also pass the default [US FOMC meeting-day filter](news-filter.md).
-It blocks both scheduled meeting-day trading sessions; it is not an economic
+It blocks US FOMC policy-event trading sessions identified by Forex Factory; it is not an economic
 calendar covering other releases. Existing position management remains active.

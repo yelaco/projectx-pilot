@@ -2,6 +2,7 @@ package dashboard
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -13,12 +14,14 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"projectxbot/internal/access"
 	"projectxbot/internal/admin"
 	"projectxbot/internal/app"
 	"projectxbot/internal/execution"
 	"projectxbot/internal/ingress"
+	"projectxbot/internal/news"
 	"projectxbot/internal/projectx"
 	"projectxbot/internal/risk"
 	"projectxbot/internal/session"
@@ -36,6 +39,9 @@ var stylesheet string
 var page = template.Must(template.New("admin").ParseFS(templateFiles, "admin.html", "pages/*.html"))
 
 type view struct {
+	NewsStatus                                                               news.Status
+	OperationManagers                                                        []admin.OperationWeek
+	OperationWeek                                                            admin.OperationWeek
 	LocalSessionLock                                                         string
 	OCORecoveryCandidates                                                    []execution.Intent
 	ManualTicketContracts                                                    []projectx.Contract
@@ -138,6 +144,19 @@ func handler(s *app.Service, token string, m *admin.Manager) http.Handler {
 			v := view{Current: current.Info, Page: name, Nav: nav, Title: title, Subtitle: subtitle, State: s.Snapshot(), Editable: m != nil, CSRF: csrf, Notice: notice, Error: message}
 			if m != nil {
 				v.Settings = m.Settings()
+				v.NewsStatus = m.NewsStatus()
+				if name == "operation-days" {
+					week := r.URL.Query().Get("week")
+					if r.Method == http.MethodPost {
+						week = r.PostForm.Get("week")
+					}
+					var err error
+					v.OperationWeek, err = m.OperationDays(week)
+					if err != nil {
+						v.Error = err.Error()
+						v.OperationWeek, _ = m.OperationDays("")
+					}
+				}
 				v.ExecutionConfig = m.ExecutionConfig()
 				lockSession, lockReason, lockErr := m.ExecutionLockInfo()
 				v.LocalSessionLock = lockReason
@@ -145,6 +164,16 @@ func handler(s *app.Service, token string, m *admin.Manager) http.Handler {
 					v.Error = "Cannot read bot session lock; execution stays blocked."
 				}
 				v.Policies = m.Policies()
+				if name == "operation-days" {
+					for _, tm := range v.Policies.TradeManagers {
+						week, err := m.OperationDaysForManager(v.OperationWeek.Start, tm.ID)
+						if err != nil {
+							v.Error = err.Error()
+						} else {
+							v.OperationManagers = append(v.OperationManagers, week)
+						}
+					}
+				}
 				for _, contract := range v.State.Contracts {
 					if !contract.ActiveContract {
 						continue
@@ -354,7 +383,7 @@ func handler(s *app.Service, token string, m *admin.Manager) http.Handler {
 			return
 		}
 		if r.Method == http.MethodPost {
-			if m == nil || (r.URL.Path != "/settings" && r.URL.Path != "/refresh" && r.URL.Path != "/account-permission" && r.URL.Path != "/automation" && r.URL.Path != "/automation-delete" && r.URL.Path != "/signal-import" && r.URL.Path != "/signal-review" && r.URL.Path != "/delivery-import" && r.URL.Path != "/delivery-reject" && r.URL.Path != "/ingress" && r.URL.Path != "/mapping" && r.URL.Path != "/admin-access" && r.URL.Path != "/trade-manager" && r.URL.Path != "/trade-manager-delete" && r.URL.Path != "/automation-execution" && !profileExecutionAction(r.URL.Path) && !executionAction(r.URL.Path)) {
+			if m == nil || (r.URL.Path != "/news-refresh" && r.URL.Path != "/operation-days" && r.URL.Path != "/settings" && r.URL.Path != "/refresh" && r.URL.Path != "/account-permission" && r.URL.Path != "/automation" && r.URL.Path != "/automation-delete" && r.URL.Path != "/signal-import" && r.URL.Path != "/signal-review" && r.URL.Path != "/delivery-import" && r.URL.Path != "/delivery-reject" && r.URL.Path != "/ingress" && r.URL.Path != "/mapping" && r.URL.Path != "/admin-access" && r.URL.Path != "/trade-manager" && r.URL.Path != "/trade-manager-delete" && r.URL.Path != "/automation-execution" && !profileExecutionAction(r.URL.Path) && !executionAction(r.URL.Path)) {
 				http.Error(w, "method not allowed", 405)
 				return
 			}
@@ -567,6 +596,26 @@ func handler(s *app.Service, token string, m *admin.Manager) http.Handler {
 				redirectAction(w, r, "automation")
 				return
 			}
+			if r.URL.Path == "/news-refresh" {
+				call, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+				err := m.RefreshNews(call)
+				cancel()
+				if err != nil {
+					render(w, 400, "", err.Error())
+					return
+				}
+				http.Redirect(w, r, "/operation-days", http.StatusSeeOther)
+				return
+			}
+			if r.URL.Path == "/operation-days" {
+				if err := m.SaveOperationDays(r.PostForm.Get("week"), r.PostForm["blocked"], r.PostForm.Get("news_filter"), r.PostForm.Get("trade_manager_id")); err != nil {
+					render(w, 400, "", err.Error())
+					return
+				}
+				m.Note("INFO", "operations", "Operation days updated; new entries paused.")
+				http.Redirect(w, r, "/operation-days?week="+r.PostForm.Get("week"), http.StatusSeeOther)
+				return
+			}
 			account, err := strconv.ParseInt(r.PostForm.Get("account_id"), 10, 64)
 			if err != nil {
 				render(w, 400, "", "Invalid account ID")
@@ -587,7 +636,7 @@ func handler(s *app.Service, token string, m *admin.Manager) http.Handler {
 			return
 		}
 		switch r.URL.Path {
-		case "/execution", "/", "/automations", "/automations/new", "/deliveries", "/signals", "/accounts", "/contracts", "/activity", "/settings", "/settings/webhooks", "/settings/access", "/trade-managers", "/trade-managers/new":
+		case "/operation-days", "/execution", "/", "/automations", "/automations/new", "/deliveries", "/signals", "/accounts", "/contracts", "/activity", "/settings", "/settings/webhooks", "/settings/access", "/trade-managers", "/trade-managers/new":
 			render(w, 200, "", "")
 		case "/api/monitor":
 			if m == nil {

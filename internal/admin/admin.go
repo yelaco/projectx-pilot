@@ -18,6 +18,7 @@ import (
 	"projectxbot/internal/config"
 	"projectxbot/internal/execution"
 	"projectxbot/internal/ingress"
+	"projectxbot/internal/news"
 	"projectxbot/internal/projectx"
 	"projectxbot/internal/storage"
 )
@@ -41,6 +42,7 @@ type Update struct {
 	ClearCredentials bool
 }
 type Manager struct {
+	news                        *news.Calendar
 	continuousRetryAt           time.Time
 	now                         func() time.Time
 	automationWake              chan struct{}
@@ -74,6 +76,7 @@ func Open(c config.Config, configPath, stateDir string) (*Manager, string, error
 		return nil, "", err
 	}
 	m := &Manager{now: time.Now, automationWake: make(chan struct{}, 1), startedAt: time.Now(), c: c, configPath: configPath, credentialsPath: filepath.Join(stateDir, "credentials.json")}
+	m.news = news.New(filepath.Join(stateDir, "news-calendar.json"), nil, time.Now)
 	data, err := os.ReadFile(m.credentialsPath)
 	if err == nil {
 		if err = json.Unmarshal(data, &m.credentials); err != nil {

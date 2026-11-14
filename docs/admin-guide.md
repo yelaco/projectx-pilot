@@ -138,3 +138,11 @@ New dashboard automation profiles have a fixed webhook signal source. Local-manu
 Practice execution requires no automation profile or webhook delivery. It is a local API order test on the saved Practice account/single-account Trade Manager and globally allowed active contract. Preview calculates risk without transmission; the separate password-confirmed approval sends a real Practice order. Read-only account/connection monitoring already checks API access without placing an order. Automated webhook trading is controlled separately by the profile’s Start/Pause controls.
 
 Practice execution now labels persistent application locks as **Bot local safety lock**, separately from the provider account's trading permission. The narrowly scoped **Review local lock from the old OCO checker** panel appears only for the matching legacy lock and closed current-session executions. It requires password confirmation, historical proof and two fresh flat-account observations, records an audit repair, and leaves trading paused. See [recovery procedures](recovery-procedures.md#reviewing-the-known-one-way-oco-false-alarm). It cannot clear daily loss locks or unresolved order uncertainty.
+
+## Operation days
+
+Open **Operation days** to plan Saturday–Friday weeks. The general calendar is
+shown first, followed by each Trade Manager. Lower calendars can add blocked
+dates but cannot override a general or automatic FOMC block. Saving pauses entries;
+monitoring and emergency management continue. See [operation days](operation-days.md)
+for session-date semantics, persistence and news-source limitations.

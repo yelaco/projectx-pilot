@@ -68,6 +68,10 @@ func run() error {
 	go func() { defer close(tunnelDone); tunnelController.Run(ctx) }()
 	defer func() { cancel(); <-tunnelDone }()
 
+	newsDone := make(chan struct{})
+	go func() { defer close(newsDone); manager.RunNews(ctx) }()
+	defer func() { cancel(); <-newsDone }()
+
 	executionDone := make(chan struct{})
 	go func() { defer close(executionDone); manager.RunExecution(ctx) }()
 	defer func() { cancel(); <-executionDone }()
