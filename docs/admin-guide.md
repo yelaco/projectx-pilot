@@ -165,3 +165,7 @@ forwards admin access only; no change to the public webhook tunnel or outbound
 ProjectX routing is required. Do not forward port 8080 through the public tunnel.
 SSH server/network setup is not performed by the bot installer. Remote dashboard
 access does not establish provider approval for an order-trigger workflow.
+
+## Standalone operator guide
+
+Open `/guide` on the local bot service, or use the **ⓘ Guide** button in the dashboard header to open it in a new tab. It has its own layout, quick start, detailed setup/operation sections, status explanations, and troubleshooting. It requires no login and contains no account data, credentials, profile state, or trading controls. Administrator pages and APIs still require authentication. The guide remains on the local dashboard port and must not be publicly tunneled.

@@ -25,7 +25,9 @@ cd projectx-pilot
 
 The installer checks dependencies, builds the application, and starts its user services. It prints your initial login details. Package installation may require sudo.
 
-Open **http://127.0.0.1:8080**, then:
+Open **http://127.0.0.1:8080**. The standalone **[Guide](http://127.0.0.1:8080/guide)** includes a quick start and detailed operating instructions; you can also open it from the dashboard’s **ⓘ Guide** button.
+
+To configure your first automation:
 
 1. Configure your ProjectX connection and discover your accounts.
 2. Create a Trade Manager and an automation profile. Configure its routing, trading setup, and webhook messages.

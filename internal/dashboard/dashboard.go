@@ -113,6 +113,9 @@ func handler(s *app.Service, token string, m *admin.Manager) http.Handler {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'self'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; form-action 'self'; base-uri 'none'")
 		w.Header().Set("Referrer-Policy", "same-origin")
+		if serveGuide(w, r) {
+			return
+		}
 		render := func(w http.ResponseWriter, status int, notice, message string) {
 			path, tab := r.URL.Path, r.URL.Query().Get("tab")
 			if r.Method == http.MethodPost {

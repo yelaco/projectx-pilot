@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Get started with ProjectX Pilot: connect your account, configure automation, deliver TradingView alerts, and monitor execution.">
+  <title>Guide · ProjectX Pilot</title>
+  <link rel="stylesheet" href="/guide.css">
+</head>
+<body>
+<a class="skip-link" href="#content">Skip to guide</a>
+<header class="guide-header">
+  <a class="brand" href="/guide"><span class="brand-mark" aria-hidden="true">P×</span>ProjectX Pilot<span class="guide-label">Guide</span></a>
+  <a class="dashboard-link" href="/">Open dashboard <span aria-hidden="true">↗</span></a>
+</header>
+<div class="guide-layout">
+  <aside class="contents">
+    <nav aria-label="Guide contents">
+      <p class="nav-label">GET STARTED</p>
+      <a href="#quick-start">Quick start</a>
+      <a href="#connection">Connection &amp; accounts</a>
+      <a href="#trade-managers">Trade managers &amp; risk</a>
+      <a href="#profiles">Automation profiles</a>
+      <a href="#delivery">Webhook delivery</a>
+      <p class="nav-label">OPERATE</p>
+      <a href="#execution">Orders &amp; protection</a>
+      <a href="#schedules">Schedules &amp; news</a>
+      <a href="#monitoring">Monitoring &amp; statuses</a>
+      <a href="#controls">Pause &amp; emergency controls</a>
+      <a href="#maintenance">Updates &amp; recovery</a>
+      <a href="#troubleshooting">Troubleshooting</a>
+      <a href="#boundaries">Supported scope</a>
+    </nav>
+    <p class="contents-note">This guide contains no account data or secrets. Dashboard actions require your administrator login.</p>
+  </aside>
+  <main id="content">
+    <div class="hero">
+      <p class="eyebrow">THE OPERATOR GUIDE</p>
+      <h1>Set up once.<br>Know what is running.</h1>
+      <p class="lead">Connect your accounts, route TradingView signals, and follow each trade from delivery to protection. Start here, then use the detailed sections when you need them.</p>
+      <div class="hero-actions"><a class="button" href="#quick-start">Quick start <span aria-hidden="true">↓</span></a><a class="text-link" href="#troubleshooting">Find a problem</a></div>
+      <div class="callout"><strong>Read-only by default.</strong> Creating profiles or enabling webhook receiving does not start trading. Automatic orders require saved trading setup, an explicit local Start, and an eligible, armed account runner.</div>
+    </div>
+
+    <section id="quick-start">
+      <p class="eyebrow">YOUR FIRST AUTOMATION</p><h2>Quick start</h2>
+      <p>Use the computer that will run ProjectX Pilot and originate its trading API requests. Start with a Practice account while you verify your setup.</p>
+      <ol class="steps">
+        <li><h3>Connect ProjectX</h3><p>In <a href="/settings">Settings → ProjectX connection</a>, enter your exact TopstepX platform login and API key. Your login may be an email. Save, then check <a href="/accounts">Accounts</a> for the correct account ID and trading permission.</p></li>
+        <li><h3>Create a Trade Manager</h3><p>In <a href="/trade-managers">Trade managers</a>, select one or more explicit accounts and set the maximum planned risk per trade. Each target account gets its own risk budget.</p></li>
+        <li><h3>Create an automation profile</h3><p>In <a href="/automations">Automations</a>, set its strategy identifier, instruments, and Trade Manager. Under Automatic execution → Signal routing, choose automatic handling, the actual contract expiry, and Market or Limit entry.</p></li>
+        <li><h3>Save trading setup</h3><p>Set estimated round-trip costs, slippage reserve, maximum contracts, and price-deviation tolerance. Confirm the selected accounts, Auto OCO, and reviewed session calendar. Save with your administrator password. Saving does not arm an order.</p></li>
+        <li><h3>Connect TradingView delivery</h3><p>Enable receiving in <a href="/settings/webhooks">Settings → Webhook &amp; tunnel</a>. Configure HTTPS delivery to the receiver. Set the profile's price mappings, then copy its complete webhook URL and generated BUY/SELL messages into TradingView. Verify all numeric placeholders resolve.</p></li>
+        <li><h3>Start and verify every target</h3><p>Click Start automation on the profile. Open <a href="/runners">Execution runners</a> and check each target is armed and accepting eligible signals. New valid alerts can then execute automatically, without per-alert approval.</p></li>
+      </ol>
+      <div class="callout"><strong>Start is not the same as ready.</strong> “Account runners active; inspect per-account readiness” confirms the run was requested. Some targets may still be waiting or blocked. Alerts received before a target is armed are blocked permanently; they do not fire later.</div>
+    </section>
+
+    <section id="connection">
+      <h2>Connection &amp; accounts</h2>
+      <p>The account selected in Connection settings is your monitoring account. Automatic execution targets come from the profile's Trade Manager, using pinned numeric account IDs. Incoming alerts cannot choose arbitrary accounts.</p>
+      <dl class="definitions">
+        <div><dt>Platform login</dt><dd>Use the exact login that authenticates with TopstepX, including an email if that is your platform username. Use an API key, not your account password.</dd></div>
+        <div><dt>Refresh interval</dt><dd>Controls periodic account/contract discovery. It does not schedule webhook dispatch. Fresh account, exposure, session, quote, and risk checks still run before an entry.</dd></div>
+        <div><dt>Account permission</dt><dd>Local execution permission and ProjectX <code>canTrade</code> are separate. A local permission cannot override a provider restriction. Automatic targets must also have API-verified simulated status.</dd></div>
+      </dl>
+      <p>If credentials are managed by service environment variables, the dashboard shows that and does not override them. Manage administrator logins separately in <a href="/settings/access">Settings → Admin access</a>.</p>
+    </section>
+
+    <section id="trade-managers">
+      <h2>Trade managers &amp; position sizing</h2>
+      <p>A Trade Manager supplies the account routing and risk policy. New and re-saved simplified managers enforce planned risk per trade; they do not calculate MLL or enforce cumulative daily-loss, trade-count, or portfolio limits. Existing legacy policies keep their saved limits until explicitly changed.</p>
+      <div class="formula"><p>Estimated risk per contract</p><code>stop ticks × tick value + slippage reserve + round-trip costs</code><p>Automatic quantity</p><code>min(maximum contracts, floor(available risk / risk per contract))</code></div>
+      <p>Tick size and tick value come from authoritative contract metadata. Quantities round down to whole contracts; less than one contract is rejected. Fees, commissions, and slippage estimates are part of the budget. Actual loss can exceed planned risk during gaps or adverse execution.</p>
+      <div class="callout"><strong>Risk multiplies across targets.</strong> A $150 per-trade manager targeting four accounts can plan up to $600 across that signal. Targets execute independently: one can be accepted while another is blocked or uncertain.</div>
+      <h3>Account ownership</h3>
+      <p>One running profile owns an account. Profiles on distinct accounts can run concurrently; two profiles cannot share a running account, even for different instruments. Pause the old profile and resolve its working or uncertain execution before changing owner. A manager supports up to 20 targets; multi-account routing requires per-trade-only risk.</p>
+    </section>
+
+    <section id="profiles">
+      <h2>Automation profiles</h2>
+      <p>Each profile binds a strategy identifier, allowed instruments, Trade Manager, contract expiry, order type, webhook credentials, mappings, and saved trading setup. Keep separate strategies in separate profiles and review pinned contracts when they roll.</p>
+      <div class="two-column">
+        <article class="card"><h3>Review only</h3><p>Alerts go to the inbox for local review. Reviewing or importing an alert does not submit an order.</p></article>
+        <article class="card"><h3>Automatic execution</h3><p>After explicit Start and account arming, eligible new alerts run through risk checks and the execution engine without an approval click for each alert.</p></article>
+      </div>
+      <p>Saving account/risk/routing changes pauses affected profiles and may require trading-setup confirmation again. Existing positions retain the policy captured when their trade was submitted. Restart always leaves profiles paused.</p>
+      <h3>Price mappings</h3>
+      <p>Choose shared BUY/SELL placeholders or separate entry, stop-loss, and take-profit mappings per direction. Use verified indicator outputs that become numeric values. Unresolved placeholders and wrong-side stops/targets are rejected. Message templates containing delivery tokens are private; do not put them in logs, screenshots, or public issues.</p>
+    </section>
+
+    <section id="delivery">
+      <h2>Webhook &amp; HTTPS delivery</h2>
+      <p>The dashboard uses local port <code>8080</code>. The notification receiver uses <code>127.0.0.1:8090</code>. Configure public delivery to the receiver only; never tunnel the dashboard, guide, or trading controls.</p>
+      <dl class="definitions">
+        <div><dt>Quick Tunnel</dt><dd>The dashboard preset starts a test tunnel. Its HTTPS hostname can change when recreated; update TradingView if it changes.</dd></div>
+        <div><dt>Named tunnel</dt><dd>Use a domain/hostname you control for a stable URL. Configure Cloudflare's public hostname to forward to HTTP <code>127.0.0.1:8090</code>, then save the matching public HTTPS base URL in webhook settings.</dd></div>
+        <div><dt>Profile URL &amp; token</dt><dd>Copy the full generated URL from the profile rather than constructing it manually. The generated message includes its private delivery token. Token rotation invalidates previously pasted messages.</dd></div>
+      </dl>
+      <p>For named-tunnel installation, after creating the domain/tunnel/route in Cloudflare:</p>
+      <pre><code>./scripts/install-user-service.sh --named-tunnel alerts.example.com</code></pre>
+      <p>The installer prompts for the tunnel token privately. That token is different from the webhook delivery token and ProjectX API key. Configuring a tunnel does not establish provider permission for the remote-trigger workflow.</p>
+      <h3>How an alert reaches a runner</h3>
+      <p>The receiver validates and saves the alert in SQLite, then sends a one-byte Unix socket notification to wake local dispatch. SQLite holds the alert; the socket carries no signal payload or execution authority. A missed notification has a 30-second scan fallback, subject to freshness and arming checks.</p>
+      <p>HTTP <code>202</code> means the alert was stored, not that an order was accepted. Identical repeated IDs are deduplicated; conflicting content under an existing ID is rejected. Generated IDs allow one distinct entry per direction/bar. Old, busy, paused, pre-arming, and interrupted claims are not replayed later.</p>
+    </section>
+
+    <section id="execution">
+      <h2>Entry orders &amp; protection</h2>
+      <div class="two-column">
+        <article class="card"><h3>Market entry</h3><p>Requests execution at the available market. A signal's reference entry is not a guaranteed fill price. Fresh quotes and any configured deviation limit still apply.</p></article>
+        <article class="card"><h3>Limit entry</h3><p>Works at the signal entry price. The unfilled remainder expires 30 minutes after the original signal timestamp; Pause or session management can cancel it sooner.</p></article>
+      </div>
+      <p>Auto OCO must be enabled in the platform and confirmed in trading setup. Entry requests include stop/target tick offsets; protective children attach to resulting fills. An unfilled limit entry is not an open position. After a partial fill, the remaining entry and protection for filled exposure are monitored separately.</p>
+      <p>Brackets are relative to actual fills, so final absolute SL/TP prices can differ from the signal reference. The engine verifies linked protective orders and matching exposure. Missing or inconsistent protection triggers the fail-safe, blocks entries on that account, and requests emergency management. Inspect the account in TopstepX if protection or flatness cannot be verified.</p>
+      <p>Only entry alerts are supported. Remote TP/SL exit signals and replacement-entry workflows are unsupported. The service must be running and connected to perform local expiry/cutoff management; broker-side brackets remain essential during laptop outages.</p>
+      <h3>Practice API tests</h3>
+      <p><a href="/execution">Practice execution</a> tests real API order submission on a confirmed PRAC account, without an automation profile. Market/Limit buttons calculate a preview; a separate password-confirmed approval submits. Exact contract quantities must fit risk and are never silently resized. Practice orders still reach ProjectX; this is not paper simulation.</p>
+    </section>
+
+    <section id="schedules">
+      <h2>Operation days, sessions &amp; news</h2>
+      <p>Use <a href="/operation-days">Operation days</a> to plan a Saturday–Friday week. General blocked dates apply to all managers; manager-specific dates add restrictions and cannot override a general block. These are saved dates, not recurring weekday rules—review each new week.</p>
+      <p>The US FOMC policy-event filter uses the Forex Factory weekly feed. It refreshes automatically and retains cached events. Missing/stale coverage alone does not block a date; known cached matching event blocks remain. It is not a filter for every important US release. Manual operation-day restrictions still apply when news data is missing.</p>
+      <p>Sessions use <code>America/Chicago</code>, independently of your desktop timezone, including daylight-saving changes. Normal entries end at 15:00 Chicago and scheduled flattening is by 15:05; reviewed early-close days use additional margins. A running profile can wait through closures and reconcile into the next verified session without another click.</p>
+      <div class="callout"><strong>Calendar coverage is bounded.</strong> Continuous automation currently supports reviewed 2026 MNQ/MGC sessions. Unknown years/instruments and unsupported merged sessions cannot authorize trading. Revision: <code>{{.CalendarRevision}}</code>.</div>
+    </section>
+
+    <section id="monitoring">
+      <h2>Monitoring &amp; status meanings</h2>
+      <p><a href="/runners">Execution runners</a> shows ownership, readiness, each account's execution, user-stream status, and per-target outcomes. The profile monitor gives strategy context; <a href="/deliveries">Inbox</a> shows received alerts; <a href="/activity">Activity</a> holds sanitized events.</p>
+      <div class="table-wrap"><table><thead><tr><th>Status</th><th>What it means</th></tr></thead><tbody>
+        <tr><td>Running / runners active</td><td>Start was requested. Check each account's readiness; this alone is not entry permission.</td></tr>
+        <tr><td>Armed / accepting signals</td><td>Session authorization is active. Every new entry still passes fresh data and risk checks.</td></tr>
+        <tr><td>Waiting</td><td>The runner is waiting for market hours, reconciliation, account readiness, or a session risk limit. Read its reason.</td></tr>
+        <tr><td>Submitted / accepted</td><td>ProjectX acknowledged the order. This does not establish a fill or protective coverage.</td></tr>
+        <tr><td>Protected / partial</td><td>Observed filled exposure has matching linked stop and target coverage; a partial fill may still have a working remainder.</td></tr>
+        <tr><td>Blocked target</td><td>This account did not qualify for that delivery. Other targets may have executed; the blocked target will not replay.</td></tr>
+        <tr><td>Uncertain</td><td>Acceptance could not be established. Keep reconciliation running; never resubmit the signal to guess whether it worked.</td></tr>
+        <tr><td>Protective failure / local lock</td><td>A bot safety condition blocks entries independently of TopstepX account permission. Read the first management trigger.</td></tr>
+      </tbody></table></div>
+      <h3>Latency &amp; connections</h3>
+      <p>Timing separates local webhook arrival → worker, checks → submission, submission → acknowledgement, and total acceptance. It excludes delivery before the receiver and does not measure fill latency. Network response and shared API-budget waits can dominate local dispatch time.</p>
+      <p>Runners share authentication, HTTP connections, contract metadata and quote subscriptions, and user events. Their account risk and orders remain separate. User events wake authoritative REST reconciliation; reconnect restores subscriptions and triggers fresh checks. Automatic active polling remains an adaptive backstop, not a replacement for server-side protection.</p>
+    </section>
+
+    <section id="controls">
+      <h2>Pause &amp; emergency controls</h2>
+      <dl class="definitions">
+        <div><dt>Pause profile / account</dt><dd>Stops new entries and retains position monitoring. The engine requests cancellation of any working entry remainder. An already durably reserved submission may finish its bounded one-time attempt.</dd></div>
+        <div><dt>Pause all entries</dt><dd>Closes a persistent global entry gate for automatic and manual arming. Resume clears only that gate; explicitly Start the desired profiles again.</dd></div>
+        <div><dt>Flatten account / profile / all</dt><dd>Password-confirmed closing/cancellation for the relevant managed executions. A request is not proof of flatness; verify every account's outcome. Flatten all also includes active manual recovery.</dd></div>
+      </dl>
+      <p>Pausing the application does not mean all positions are closed. Do not assume stopping a terminal, service, tunnel, or computer closes broker exposure. Keep TopstepX available for independent management.</p>
+    </section>
+
+    <section id="maintenance">
+      <h2>Updates, laptop operation &amp; recovery</h2>
+      <p>Pause automation, independently verify every account is flat with no working orders, and resolve any uncertain intent before upgrading. From an existing checkout that already uses the current Git history:</p>
+      <pre><code>git pull --ff-only
+./scripts/install-user-service.sh</code></pre>
+      <p>The installer preserves saved credentials, profiles, databases, and webhook settings. It refuses an unresolved execution. Ordinary updates do not require reconfiguring the named tunnel. Services retain their existing <code>projectx-bot</code>, <code>projectx-webhook</code>, and <code>projectx-tunnel</code> names.</p>
+      <pre><code>systemctl --user status projectx-bot projectx-webhook
+journalctl --user -u projectx-bot -n 50 --no-pager
+journalctl --user -u projectx-bot -f</code></pre>
+      <p>After restart, inspect recovery and Start the desired profiles again. Existing positions/orders are reconciled; placement is never replayed. Global pause, session locks, durable claims, and emergency latches survive restart. Never delete or replace a database to clear a gate.</p>
+      <p>Keep the laptop powered, connected, ventilated, and awake during intended operation. Screen lock does not itself stop a user service, but suspend, lid-close policy, battery depletion, and shutdown can. Verify your own power settings; ProjectX Pilot does not change them. Back up private state consistently only after shutdown with accounts independently verified flat.</p>
+    </section>
+
+    <section id="troubleshooting">
+      <h2>Troubleshooting</h2>
+      <details><summary>The profile says active, but the account is not armed</summary><p>Open Execution runners and read that account's message. Check global Pause, account ownership, current market window, saved setup, ProjectX permission, existing exposure, and local lockouts. Start is a running choice, not proof every target is ready.</p></details>
+      <details><summary>The webhook returned 422</summary><p>Inspect the validation message and generated template. Check required numeric prices, timestamp freshness, strategy, symbol, stop/target direction, and unresolved TradingView placeholders. Never put credentials or full token-bearing payloads in shared logs.</p></details>
+      <details><summary>The webhook arrived, but no order appeared</summary><p>Find the delivery in Inbox, then inspect its per-account outcome and runner. HTTP 202 only confirms persistence. An alert received while disarmed/busy or before arming is consumed as blocked, not delayed until later.</p></details>
+      <details><summary>The webhook URL changed</summary><p>Quick Tunnel hostnames can change when recreated. Use a named tunnel with a domain you control for a stable address. Save its public HTTPS base URL, then copy the profile's complete URL into TradingView.</p></details>
+      <details><summary>Signal price exceeds the market-deviation limit</summary><p>The entry/reference price is outside the configured tolerance. Check the contract expiry, alert freshness, and intended limit price. The profile's Trading setup can explicitly disable this guard; freshness, tick alignment, risk, quotes, and protection checks remain active.</p></details>
+      <details><summary>Submission requires reconciliation</summary><p>Keep monitoring and inspect the account in TopstepX. Review the order ID, working orders, positions, and submission diagnostic. An ambiguous request must never be blindly retried with the same or a new signal ID.</p></details>
+      <details><summary>The bot says locally locked, but TopstepX can trade</summary><p>The bot's session/fault lock is independent of provider permission. Read the original management trigger and verify protection/flatness. Restarting does not clear it. The legacy OCO review only handles its exact historical false-alarm case with verified evidence; it is not a general unlock.</p></details>
+      <details><summary>Another profile owns the account</summary><p>One profile owns each running account. Pause its owner and resolve the working/uncertain execution before switching. Use distinct target accounts for concurrent profiles; do not create another state directory to bypass ownership.</p></details>
+    </section>
+
+    <section id="boundaries">
+      <h2>Supported scope &amp; provider policy</h2>
+      <p>Automatic targets must be API-verified simulated Practice, Trading Combine, or Express Funded accounts with trading permission. Live Funded is unsupported. Manual tests remain PRAC-only. Automatic MLL discovery, paper simulation, local strategy generation, arbitrary order modification/trailing, and calendars beyond reviewed coverage are not implemented.</p>
+      <p>ProjectX Pilot is an independent community project, unaffiliated with ProjectX or Topstep. Local order execution and tunnel setup do not establish permission for cloud-originated triggers. Confirm your intended workflow against the <a href="https://help.topstep.com/en/articles/11187768-topstepx-api-access">official Topstep API policy</a>. All trading API requests originate directly from the operator's computer.</p>
+      <p>See the <a href="https://github.com/yelaco/projectx-pilot/tree/main/docs">repository documentation</a> for architecture, API evidence, deployment, and detailed recovery procedures.</p>
+    </section>
+    <footer class="guide-footer"><span>ProjectX Pilot · Operator guide</span><a href="#content">Back to top ↑</a></footer>
+  </main>
+</div>
+</body>
+</html>
