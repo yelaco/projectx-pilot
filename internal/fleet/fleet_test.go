@@ -199,8 +199,39 @@ func record(f *Fleet, p Plan, id string) storage.Record {
 	now := f.now().UTC()
 	return storage.Record{ProfileID: p.ProfileID, Status: "pending_review", ReceivedAt: now.Format(time.RFC3339Nano), Signal: signal.Signal{ID: id, Strategy: p.Strategy, Symbol: "MNQ", Direction: "BUY", Entry: 20000, StopLoss: 19990, TakeProfit: 20020, Timestamp: now}}
 }
+
+// gatedPlacement forces the fast target to finish before the slow target reaches
+// the gateway, making the scheduler ordering behind the original failure explicit.
+type gatedPlacement struct {
+	execution.API
+	gate <-chan struct{}
+}
+
+func (a gatedPlacement) Place(ctx context.Context, request projectx.PlaceRequest) (int64, error) {
+	select {
+	case <-a.gate:
+		return a.API.Place(ctx, request)
+	case <-ctx.Done():
+		return 0, ctx.Err()
+	}
+}
+
 func TestMultiAccountFanoutIsConcurrentAndIdempotent(t *testing.T) {
 	f, store, g, ctx := setup(t)
+	// Release before setup's shutdown cleanup, including when an assertion fails.
+	var releaseOnce, entryOnce sync.Once
+	entryGate := make(chan struct{})
+	allowFirstEntry := func() { entryOnce.Do(func() { close(entryGate) }) }
+	unblock := func() { releaseOnce.Do(func() { close(g.release) }) }
+	t.Cleanup(func() { allowFirstEntry(); unblock() })
+	factory := f.factory
+	f.SetFactory(func(account int64) (execution.API, execution.Quotes, error) {
+		api, quotes, err := factory(account)
+		if account == 1 && err == nil {
+			api = gatedPlacement{API: api, gate: entryGate}
+		}
+		return api, quotes, err
+	})
 	p := plan("swift", 1, 2)
 	if err := f.Start(ctx, p, nil); err != nil {
 		t.Fatal(err)
@@ -210,15 +241,23 @@ func TestMultiAccountFanoutIsConcurrentAndIdempotent(t *testing.T) {
 	g.blocked = 1
 	g.mu.Unlock()
 	delivery := record(f, p, "signal-one")
-	begin := time.Now()
-	if err := f.Dispatch(delivery, p); err != nil {
-		t.Fatal(err)
-	}
-	if time.Since(begin) > 100*time.Millisecond {
-		t.Fatal("dispatch waited for HTTP")
+	// Disk and scheduler latency are not a dispatch SLA. Prove dispatch returns
+	// while account 1 remains blocked rather than imposing a 100ms wall-clock cap.
+	dispatched := make(chan error, 1)
+	go func() { dispatched <- f.Dispatch(delivery, p) }()
+	select {
+	case err := <-dispatched:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("dispatch did not return while a gateway submission was blocked")
 	}
 	waitFor(t, func() bool {
-		jobs, _ := store.TargetJobs()
+		jobs, err := store.TargetJobs()
+		if err != nil {
+			t.Fatal(err)
+		}
 		for _, j := range jobs {
 			if j.AccountID == 2 && j.State == "submitted" {
 				return true
@@ -226,16 +265,31 @@ func TestMultiAccountFanoutIsConcurrentAndIdempotent(t *testing.T) {
 		}
 		return false
 	})
-	// Account 1 remains blocked in submission; account 2 already completed.
+	// Deliberately reproduce the old test's faulty assumption: account 2 has
+	// completed, but account 1 has not reached the gateway yet.
 	g.mu.Lock()
-	if g.placed[1] != 1 || g.placed[2] != 1 {
-		t.Fatal("missing target")
-	}
+	earlyFirst := g.placed[1]
 	g.mu.Unlock()
+	if earlyFirst != 0 {
+		t.Fatal("test placement gate failed")
+	}
+	allowFirstEntry()
+	waitFor(t, func() bool {
+		g.mu.Lock()
+		defer g.mu.Unlock()
+		return g.placed[1] > 0 && g.placed[2] > 0
+	})
+	// Account 1 now remains blocked in submission; account 2 already completed.
+	g.mu.Lock()
+	first, second := g.placed[1], g.placed[2]
+	g.mu.Unlock()
+	if first != 1 || second != 1 {
+		t.Fatalf("missing target: account 1 attempts=%d, account 2 attempts=%d", first, second)
+	}
 	if err := f.Dispatch(delivery, p); err != nil {
 		t.Fatal(err)
 	}
-	close(g.release)
+	unblock()
 	waitFor(t, func() bool {
 		jobs, _ := store.TargetJobs()
 		if len(jobs) != 2 {
@@ -490,10 +544,11 @@ func TestProtectiveFailureDoesNotFlattenAnotherAccount(t *testing.T) {
 	f.WakeAccount(1)
 	waitFor(t, func() bool { g.mu.Lock(); defer g.mu.Unlock(); return g.closed[1] == 1 })
 	g.mu.Lock()
-	if g.closed[2] != 0 || len(g.orders[2]) != 1 {
+	otherClosed, otherOrders := g.closed[2], len(g.orders[2])
+	g.mu.Unlock()
+	if otherClosed != 0 || otherOrders != 1 {
 		t.Fatal("another account was flattened or cancelled")
 	}
-	g.mu.Unlock()
 	w, _, err := session.ContinuousWindow(f.now(), p.Instruments)
 	if err != nil {
 		t.Fatal(err)
