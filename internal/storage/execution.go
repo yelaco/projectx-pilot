@@ -6,7 +6,9 @@ package storage
 */
 import "C"
 import (
+	"encoding/hex"
 	"errors"
+	"fmt"
 	"unsafe"
 )
 
@@ -97,7 +99,7 @@ func (s *Inbox) LockExecution(account, session, reason string) error {
 	if err := s.executionSchema(); err != nil {
 		return err
 	}
-	return s.write("INSERT OR REPLACE INTO execution_locks(account,session,reason) VALUES(?,?,?)", account, session, reason)
+	return s.write(`INSERT INTO execution_locks(account,session,reason) VALUES(?,?,?) ON CONFLICT(account,session) DO UPDATE SET reason=CASE WHEN execution_locks.reason IN ('daily loss limit reached','session loss or trade limit reached','liquidation buffer reached') THEN execution_locks.reason ELSE excluded.reason END`, account, session, reason)
 }
 func (s *Inbox) ExecutionLock(account, session string) (string, error) {
 	s.mu.Lock()
@@ -135,7 +137,17 @@ func (s *Inbox) ResolveStaleQuoteLock(account, session, intent, expected string)
 	return s.resolveReviewedLock(account, session, intent, expected, "market data stale while managing exposure")
 }
 
-func (s *Inbox) resolveReviewedLock(account, session, intent, expected, allowed string) error {
+// ResolveConfirmedStaleQuoteLock records the acknowledged current exposure without
+// changing any execution, broker order, placement claim or emergency latch.
+func (s *Inbox) ResolveConfirmedStaleQuoteLock(account, session, intent, expected, snapshot string, positions, orders int) error {
+	hash, err := hex.DecodeString(snapshot)
+	if err != nil || len(hash) != 32 || positions < 0 || orders < 0 || positions+orders == 0 {
+		return errors.New("valid confirmed account snapshot required")
+	}
+	note := fmt.Sprintf("stale-quote historical verification; operator confirmed %d positions and %d working orders; two matching fresh observations; snapshot %s", positions, orders, snapshot)
+	return s.resolveReviewedLock(account, session, intent, expected, "market data stale while managing exposure", note)
+}
+func (s *Inbox) resolveReviewedLock(account, session, intent, expected, allowed string, auditNote ...string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {
@@ -160,7 +172,11 @@ func (s *Inbox) resolveReviewedLock(account, session, intent, expected, allowed 
 	if C.sqlite3_changes(s.db) != 1 {
 		return errors.New("lock changed, execution unresolved, or scoped closed intent missing; no lock was cleared")
 	}
-	if err := s.write(`INSERT INTO execution_recoveries(intent,account,session,reason,at) VALUES(?,?,?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now'))`, intent, account, session, expected+": historical verification and two fresh flat observations"); err != nil {
+	note := expected + ": historical verification and two fresh flat observations"
+	if len(auditNote) == 1 {
+		note = auditNote[0]
+	}
+	if err := s.write(`INSERT INTO execution_recoveries(intent,account,session,reason,at) VALUES(?,?,?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now'))`, intent, account, session, note); err != nil {
 		return err
 	}
 	return s.exec("COMMIT")

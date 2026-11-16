@@ -37,6 +37,7 @@ type report struct {
 	at         time.Time
 }
 type Discord struct {
+	daily      bool
 	mu         sync.Mutex
 	path       string
 	settings   Settings
@@ -86,6 +87,16 @@ func Open(path string) (*Discord, error) {
 	}
 	return d, nil
 }
+
+// OpenDaily creates an independent sender/settings store for read-only trading reports.
+func OpenDaily(path string) (*Discord, error) {
+	d, err := Open(path)
+	if err != nil {
+		return nil, err
+	}
+	d.daily = true
+	return d, nil
+}
 func (d *Discord) Configure(enabled bool, raw string, clear bool) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -102,7 +113,7 @@ func (d *Discord) Configure(enabled bool, raw string, clear bool) error {
 		}
 	}
 	if enabled && next.URL == "" {
-		return errors.New("configure a Discord webhook before enabling attention reports")
+		return errors.New("configure a Discord webhook before enabling reports")
 	}
 	next.Enabled = enabled
 	b, _ := json.Marshal(next)
@@ -126,16 +137,19 @@ func (d *Discord) Status() Status {
 }
 
 // Publish is bounded and never waits for network I/O. Reports while disabled are discarded.
-func (d *Discord) Publish(message string) {
+func (d *Discord) Publish(message string) { d.Enqueue(message) }
+
+// Enqueue reports whether this best-effort message entered the bounded queue.
+func (d *Discord) Enqueue(message string) bool {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	if !d.settings.Enabled || d.suspended {
-		return
+		return false
 	}
 	now := time.Now().UTC()
 	key := sha256.Sum256([]byte(message))
 	if at, ok := d.seen[key]; ok && now.Sub(at) < 5*time.Minute {
-		return
+		return false
 	}
 	if len(d.seen) >= 256 {
 		for k, at := range d.seen {
@@ -145,16 +159,18 @@ func (d *Discord) Publish(message string) {
 		}
 		if len(d.seen) >= 256 {
 			d.status.Dropped++
-			return
+			return false
 		}
 	}
 	r := report{message: message, generation: d.generation, at: now}
 	select {
 	case d.queue <- r:
 		d.seen[key] = now
+		return true
 	default:
 		d.status.Dropped++
-		d.status.LastError = "Notification queue full; inspect local attention reports"
+		d.status.LastError = "Notification queue full; inspect local reports"
+		return false
 	}
 }
 func (d *Discord) Run(ctx context.Context) {
@@ -189,6 +205,9 @@ func (d *Discord) Run(ctx context.Context) {
 func (d *Discord) send(ctx context.Context, endpoint string, r report) {
 	// Never include signals, credentials, webhook URLs or raw gateway errors.
 	text := "ProjectX Pilot — attention required\n" + r.at.Format(time.RFC3339) + "\n" + r.message + "\nAutomatic flattening is disabled. Review the local dashboard and exact account."
+	if d.daily {
+		text = "ProjectX Pilot — daily trading report\n" + r.at.Format(time.RFC3339) + "\n" + r.message + "\nRead-only report; no trading action requested."
+	}
 	chars := []rune(text)
 	if len(chars) > 1900 {
 		text = string(chars[:1900])
@@ -204,7 +223,7 @@ func (d *Discord) send(ctx context.Context, endpoint string, r report) {
 		d.mu.Lock()
 		defer d.mu.Unlock()
 		if r.generation == d.generation {
-			d.status.LastError = "Discord delivery unconfirmed; inspect local attention reports (no automatic retry)"
+			d.status.LastError = "Discord delivery unconfirmed; inspect local report settings (no automatic retry)"
 		}
 		return
 	}

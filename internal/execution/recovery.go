@@ -2,7 +2,12 @@ package execution
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -119,7 +124,7 @@ const staleQuoteLock = "market data stale while managing exposure"
 
 // ReviewStaleQuoteLock resolves only the retired stale-quote emergency trigger.
 // It performs read-only broker checks and never arms, replays or clears risk locks.
-func (e *Engine) ReviewStaleQuoteLock(ctx context.Context, account int64, intentID string) error {
+func (e *Engine) ReviewStaleQuoteLock(ctx context.Context, account int64, intentID string, confirmation ...string) error {
 	ctx, cancel := context.WithTimeout(ctx, 25*time.Second)
 	defer cancel()
 	e.mu.Lock()
@@ -164,29 +169,44 @@ func (e *Engine) ReviewStaleQuoteLock(ctx context.Context, account int64, intent
 	if err = verifyStaleQuoteHistory(*candidate, history); err != nil {
 		return err
 	}
-	flat := func() error {
+	observe := func() ([]projectx.Position, []projectx.Order, error) {
 		a, err := e.account(ctx, account)
 		if err != nil {
-			return err
+			return nil, nil, err
 		}
 		if a.ID != account {
-			return errors.New("account identity mismatch")
+			return nil, nil, errors.New("account identity mismatch")
 		}
 		positions, err := e.api.OpenPositions(ctx, account)
 		if err != nil {
-			return errors.New("fresh positions unavailable; local lock retained")
+			return nil, nil, errors.New("fresh positions unavailable; local lock retained")
 		}
 		orders, err := e.api.OpenOrders(ctx, account)
 		if err != nil {
-			return errors.New("fresh orders unavailable; local lock retained")
+			return nil, nil, errors.New("fresh orders unavailable; local lock retained")
 		}
-		if len(positions) != 0 || len(orders) != 0 {
-			return errors.New("account is not flat with zero working orders; local lock retained")
-		}
-		return nil
+		return positions, orders, nil
 	}
-	if err = flat(); err != nil {
+	positions, orders, err := observe()
+	if err != nil {
 		return err
+	}
+	first := reviewSnapshot(positions, orders)
+	open := len(positions) > 0 || len(orders) > 0
+	confirmed := false
+	token := ""
+	if len(confirmation) == 1 {
+		token = confirmation[0]
+	}
+	if open {
+		challenge := e.staleQuoteReview
+		if token == "" || challenge == nil || challenge.Token != token || challenge.AccountID != account || challenge.IntentID != candidate.ID || challenge.Session != candidate.Session || !e.now().Before(challenge.Expires) || challenge.Snapshot != first {
+			return e.requestStaleQuoteConfirmation(*candidate, positions, orders)
+		}
+		confirmed = true
+	} else if token != "" {
+		// A confirmation is bound to exactly what was shown, even if the account became flat.
+		return errors.New("account changed since confirmation; review again before clearing this lock")
 	}
 	timer := time.NewTimer(3 * time.Second)
 	defer timer.Stop()
@@ -195,8 +215,15 @@ func (e *Engine) ReviewStaleQuoteLock(ctx context.Context, account int64, intent
 		return ctx.Err()
 	case <-timer.C:
 	}
-	if err = flat(); err != nil {
+	latestPositions, latestOrders, err := observe()
+	if err != nil {
 		return err
+	}
+	if reviewSnapshot(latestPositions, latestOrders) != first {
+		if len(latestPositions) > 0 || len(latestOrders) > 0 {
+			return e.requestStaleQuoteConfirmation(*candidate, latestPositions, latestOrders)
+		}
+		return errors.New("account changed during review; review again before clearing this lock")
 	}
 	if err = ctx.Err(); err != nil {
 		return err
@@ -207,15 +234,33 @@ func (e *Engine) ReviewStaleQuoteLock(ctx context.Context, account int64, intent
 	if e.ctx.Err() != nil {
 		return errors.New("monitor stopped; local lock retained")
 	}
-	if err = resolver.ResolveStaleQuoteLock(strconv.FormatInt(account, 10), candidate.Session, candidate.ID, staleQuoteLock); err != nil {
+	if confirmed {
+		if e.staleQuoteReview == nil || !e.now().Before(e.staleQuoteReview.Expires) {
+			return e.requestStaleQuoteConfirmation(*candidate, latestPositions, latestOrders)
+		}
+		scoped, ok := e.store.(interface {
+			ResolveConfirmedStaleQuoteLock(string, string, string, string, string, int, int) error
+		})
+		if !ok {
+			return errors.New("store does not support audited open-exposure confirmation")
+		}
+		if err = scoped.ResolveConfirmedStaleQuoteLock(strconv.FormatInt(account, 10), candidate.Session, candidate.ID, staleQuoteLock, first, len(positions), len(orders)); err != nil {
+			return err
+		}
+	} else if err = resolver.ResolveStaleQuoteLock(strconv.FormatInt(account, 10), candidate.Session, candidate.ID, staleQuoteLock); err != nil {
 		return err
 	}
+	e.staleQuoteReview = nil
 	e.disarm()
 	e.runRequested = false
 	e.runMessage = "Paused"
 	e.message = ""
 	if e.audit != nil {
-		e.audit("WARN", "Stale-quote lock reviewed and cleared after historical verification and two fresh flat-account observations. Execution remains paused.")
+		if confirmed {
+			e.audit("WARN", "Stale-quote lock cleared after explicit open-exposure confirmation and two fresh matching observations. Positions/orders unchanged; execution remains paused.")
+		} else {
+			e.audit("WARN", "Stale-quote lock reviewed and cleared after historical verification and two fresh flat-account observations. Execution remains paused.")
+		}
 	}
 	return nil
 }
@@ -291,4 +336,47 @@ func verifyStaleQuoteHistory(i Intent, history []projectx.Order) error {
 		return errors.New("original verified protection evidence required; local lock retained")
 	}
 	return nil
+}
+
+// StaleQuoteConfirmationRequired is a fresh review prompt, not permission to trade.
+// The token is ephemeral, short-lived and scoped to the exact account/intent/snapshot.
+type StaleQuoteConfirmationRequired struct {
+	Reason          string
+	AccountID       int64
+	IntentID, Token string
+	Expires         time.Time
+	Positions       []projectx.Position
+	Orders          []projectx.Order
+}
+
+func (p *StaleQuoteConfirmationRequired) Error() string {
+	if p.Reason != "" {
+		return fmt.Sprintf("Account #%d: review %s with %d open positions and %d working orders. Confirm leaving the account untouched.", p.AccountID, p.Reason, len(p.Positions), len(p.Orders))
+	}
+	return fmt.Sprintf("Account #%d still has %d open position(s) and %d working order(s). Confirm you want to clear only the old stale-quote lock and leave them untouched.", p.AccountID, len(p.Positions), len(p.Orders))
+}
+
+type staleQuoteChallenge struct {
+	AccountID                          int64
+	IntentID, Session, Snapshot, Token string
+	Expires                            time.Time
+}
+
+func reviewSnapshot(positions []projectx.Position, orders []projectx.Order) string {
+	positions = append([]projectx.Position(nil), positions...)
+	orders = append([]projectx.Order(nil), orders...)
+	sort.Slice(positions, func(a, b int) bool { return positions[a].ID < positions[b].ID })
+	sort.Slice(orders, func(a, b int) bool { return orders[a].ID < orders[b].ID })
+	data, _ := json.Marshal(struct {
+		Positions []projectx.Position
+		Orders    []projectx.Order
+	}{positions, orders})
+	hash := sha256.Sum256(data)
+	return hex.EncodeToString(hash[:])
+}
+func (e *Engine) requestStaleQuoteConfirmation(i Intent, positions []projectx.Position, orders []projectx.Order) error {
+	token := randomID()
+	expiry := e.now().Add(2 * time.Minute).UTC()
+	e.staleQuoteReview = &staleQuoteChallenge{AccountID: i.AccountID, IntentID: i.ID, Session: i.Session, Snapshot: reviewSnapshot(positions, orders), Token: token, Expires: expiry}
+	return &StaleQuoteConfirmationRequired{AccountID: i.AccountID, IntentID: i.ID, Token: token, Expires: expiry, Positions: positions, Orders: orders}
 }

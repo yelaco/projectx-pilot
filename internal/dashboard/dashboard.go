@@ -25,6 +25,7 @@ import (
 	"github.com/yelaco/projectx-pilot/internal/execution"
 	"github.com/yelaco/projectx-pilot/internal/fleet"
 	"github.com/yelaco/projectx-pilot/internal/ingress"
+	"github.com/yelaco/projectx-pilot/internal/lockreview"
 	"github.com/yelaco/projectx-pilot/internal/news"
 	"github.com/yelaco/projectx-pilot/internal/projectx"
 	"github.com/yelaco/projectx-pilot/internal/realtime"
@@ -44,6 +45,11 @@ var stylesheet string
 var page = template.Must(template.New("admin").ParseFS(templateFiles, "admin.html", "pages/*.html"))
 
 type view struct {
+	LocalLockPolicy                                                          lockreview.Info
+	FaultRecoveryCandidates                                                  []execution.Intent
+	TradingReports                                                           attention.Status
+	StaleQuoteConfirmation                                                   *execution.StaleQuoteConfirmationRequired
+	StaleQuoteConfirmationAction                                             string
 	Attention                                                                attention.Status
 	ManagerSchedule                                                          session.Schedule
 	UserData                                                                 realtime.UserStatus
@@ -120,6 +126,7 @@ func handler(s *app.Service, token string, m *admin.Manager) http.Handler {
 		if serveGuide(w, r) {
 			return
 		}
+		var staleQuoteConfirmation *execution.StaleQuoteConfirmationRequired
 		render := func(w http.ResponseWriter, status int, notice, message string) {
 			path, tab := r.URL.Path, r.URL.Query().Get("tab")
 			if r.Method == http.MethodPost {
@@ -160,10 +167,11 @@ func handler(s *app.Service, token string, m *admin.Manager) http.Handler {
 			if notice == "" && r.Method == http.MethodGet {
 				notice = noticeText(r.URL.Query().Get("notice"))
 			}
-			v := view{ManagerSchedule: session.DefaultSchedule(), Current: current.Info, Page: name, Nav: nav, Title: title, Subtitle: subtitle, State: s.Snapshot(), Editable: m != nil, CSRF: csrf, Notice: notice, Error: message}
+			v := view{StaleQuoteConfirmation: staleQuoteConfirmation, StaleQuoteConfirmationAction: r.URL.Path, ManagerSchedule: session.DefaultSchedule(), Current: current.Info, Page: name, Nav: nav, Title: title, Subtitle: subtitle, State: s.Snapshot(), Editable: m != nil, CSRF: csrf, Notice: notice, Error: message}
 			if m != nil {
 				v.Settings = m.Settings()
 				v.Attention = m.AttentionStatus()
+				v.TradingReports = m.TradingReportStatus()
 				v.NewsStatus = m.NewsStatus()
 				if name == "operation-days" {
 					week := r.URL.Query().Get("week")
@@ -245,7 +253,11 @@ func handler(s *app.Service, token string, m *admin.Manager) http.Handler {
 				for _, j := range v.TargetJobs {
 					v.DeliveryJobs[j.DeliveryID] = append(v.DeliveryJobs[j.DeliveryID], j)
 				}
+				v.LocalLockPolicy = lockreview.Classify(lockReason)
 				for _, intent := range v.Execution.Intents {
+					if intent.AccountID == v.ExecutionConfig.AccountID && intent.Session == lockSession && v.LocalLockPolicy.Reviewable && (intent.LockReason == lockReason || intent.HaltReason == lockReason || v.LocalLockPolicy.TerminalOnly && intent.LockReason == "" && intent.HaltReason == "" && (intent.State == "closed" || intent.State == "rejected" || intent.State == "cancelled")) {
+						v.FaultRecoveryCandidates = append(v.FaultRecoveryCandidates, intent)
+					}
 					if intent.AccountID == v.ExecutionConfig.AccountID && intent.State == "closed" && intent.HaltReason == "market data stale while managing exposure" && intent.Session == lockSession && lockReason == intent.HaltReason {
 						v.StaleQuoteRecoveryCandidates = append(v.StaleQuoteRecoveryCandidates, intent)
 					}
@@ -435,7 +447,7 @@ func handler(s *app.Service, token string, m *admin.Manager) http.Handler {
 			return
 		}
 		if r.Method == http.MethodPost {
-			if m == nil || (!strings.HasPrefix(r.URL.Path, "/fleet/") && r.URL.Path != "/news-refresh" && r.URL.Path != "/operation-days" && r.URL.Path != "/settings" && r.URL.Path != "/attention-settings" && r.URL.Path != "/refresh" && r.URL.Path != "/account-permission" && r.URL.Path != "/automation" && r.URL.Path != "/automation-delete" && r.URL.Path != "/signal-import" && r.URL.Path != "/signal-review" && r.URL.Path != "/delivery-import" && r.URL.Path != "/delivery-reject" && r.URL.Path != "/ingress" && r.URL.Path != "/mapping" && r.URL.Path != "/admin-access" && r.URL.Path != "/trade-manager" && r.URL.Path != "/trade-manager-delete" && r.URL.Path != "/automation-execution" && !profileExecutionAction(r.URL.Path) && !executionAction(r.URL.Path)) {
+			if m == nil || (!strings.HasPrefix(r.URL.Path, "/fleet/") && r.URL.Path != "/news-refresh" && r.URL.Path != "/operation-days" && r.URL.Path != "/settings" && r.URL.Path != "/attention-settings" && r.URL.Path != "/trading-report-settings" && r.URL.Path != "/refresh" && r.URL.Path != "/account-permission" && r.URL.Path != "/automation" && r.URL.Path != "/automation-delete" && r.URL.Path != "/signal-import" && r.URL.Path != "/signal-review" && r.URL.Path != "/delivery-import" && r.URL.Path != "/delivery-reject" && r.URL.Path != "/ingress" && r.URL.Path != "/mapping" && r.URL.Path != "/admin-access" && r.URL.Path != "/trade-manager" && r.URL.Path != "/trade-manager-delete" && r.URL.Path != "/automation-execution" && !profileExecutionAction(r.URL.Path) && !executionAction(r.URL.Path)) {
 				http.Error(w, "method not allowed", 405)
 				return
 			}
@@ -491,6 +503,10 @@ func handler(s *app.Service, token string, m *admin.Manager) http.Handler {
 			}
 			if executionAction(r.URL.Path) {
 				if err := handleExecution(r, m, current.ID); err != nil {
+					if errors.As(err, &staleQuoteConfirmation) {
+						render(w, 200, "Review and confirm the existing account exposure before clearing this lock.", "")
+						return
+					}
 					m.Note("WARN", "execution", err.Error())
 					render(w, 400, "", err.Error())
 					return
@@ -498,6 +514,10 @@ func handler(s *app.Service, token string, m *admin.Manager) http.Handler {
 				m.Note("INFO", "execution", "Local execution action completed; inspect the execution monitor for the resulting state.")
 				if r.URL.Path == "/execution/review-oco-lock" {
 					redirectAction(w, r, "oco-reviewed")
+				} else if r.URL.Path == "/execution/review-fault-lock" {
+					redirectAction(w, r, "fault-lock-reviewed")
+				} else if r.URL.Path == "/execution/review-stale-quote-lock" {
+					redirectAction(w, r, "stale-quote-reviewed")
 				} else if r.URL.Path == "/execution/preview" || r.URL.Path == "/execution/ticket" {
 					render(w, 200, "Trade calculated. Review the preview before submitting.", "")
 				} else {
@@ -664,12 +684,29 @@ func handler(s *app.Service, token string, m *admin.Manager) http.Handler {
 					} else {
 						err = m.ReviewRunnerOCOLock(r.Context(), current.ID, r.PostForm.Get("current_password"), account, r.PostForm.Get("intent_id"))
 					}
+				case "/fleet/review-fault":
+					account, parseErr := strconv.ParseInt(r.PostForm.Get("account_id"), 10, 64)
+					if parseErr != nil || account <= 0 {
+						err = errors.New("invalid runner account")
+					} else {
+						confirmation, confirmErr := staleQuoteConfirmationToken(r)
+						if confirmErr != nil {
+							err = confirmErr
+						} else {
+							err = m.ReviewRunnerFaultLock(r.Context(), current.ID, r.PostForm.Get("current_password"), account, r.PostForm.Get("intent_id"), confirmation)
+						}
+					}
 				case "/fleet/review-stale-quote":
 					account, e := strconv.ParseInt(r.PostForm.Get("account_id"), 10, 64)
 					if e != nil || account <= 0 {
 						err = errors.New("invalid runner account")
 					} else {
-						err = m.ReviewRunnerStaleQuoteLock(r.Context(), current.ID, r.PostForm.Get("current_password"), account, r.PostForm.Get("intent_id"))
+						confirmation, confirmErr := staleQuoteConfirmationToken(r)
+						if confirmErr != nil {
+							err = confirmErr
+						} else {
+							err = m.ReviewRunnerStaleQuoteLock(r.Context(), current.ID, r.PostForm.Get("current_password"), account, r.PostForm.Get("intent_id"), confirmation)
+						}
 					}
 				case "/fleet/account-pause", "/fleet/account-flatten":
 					account, e := strconv.ParseInt(r.PostForm.Get("account_id"), 10, 64)
@@ -685,7 +722,19 @@ func handler(s *app.Service, token string, m *admin.Manager) http.Handler {
 					return
 				}
 				if err != nil {
+					if errors.As(err, &staleQuoteConfirmation) {
+						render(w, 200, "Review and confirm the existing account exposure before clearing this lock.", "")
+						return
+					}
 					render(w, 400, "", err.Error())
+					return
+				}
+				if r.URL.Path == "/fleet/review-fault" {
+					http.Redirect(w, r, "/runners?notice=fault-lock-reviewed", http.StatusSeeOther)
+					return
+				}
+				if r.URL.Path == "/fleet/review-stale-quote" {
+					http.Redirect(w, r, "/runners?notice=stale-quote-reviewed", http.StatusSeeOther)
 					return
 				}
 				http.Redirect(w, r, "/runners", http.StatusSeeOther)
@@ -709,6 +758,15 @@ func handler(s *app.Service, token string, m *admin.Manager) http.Handler {
 				}
 				m.Note("INFO", "operations", "Operation days updated; new entries paused.")
 				http.Redirect(w, r, "/operation-days?week="+r.PostForm.Get("week"), http.StatusSeeOther)
+				return
+			}
+			if r.URL.Path == "/trading-report-settings" {
+				err := m.SaveTradingReports(current.ID, r.PostForm.Get("current_password"), r.PostForm.Get("enabled") == "yes", r.PostForm.Get("discord_webhook"), r.PostForm.Get("clear_webhook") == "yes")
+				if err != nil {
+					render(w, 400, "", err.Error())
+					return
+				}
+				http.Redirect(w, r, "/settings", http.StatusSeeOther)
 				return
 			}
 			if r.URL.Path == "/attention-settings" {

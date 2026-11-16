@@ -238,3 +238,62 @@ func TestStaleQuoteReviewClearsOnlyMatchingClosedFaultAndKeepsClaims(t *testing.
 		t.Fatal("review replayed")
 	}
 }
+
+func TestConfirmedStaleQuoteReviewIsScopedAndPreservesExecution(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "execution.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	row := ExecRow{ID: "reviewed-closed", Account: "42", Session: "2026-11-13", State: "closed", Payload: "unchanged emergency latch and history"}
+	if err = s.ReserveExecution(row); err != nil {
+		t.Fatal(err)
+	}
+	const reason = "market data stale while managing exposure"
+	if err = s.LockExecution("42", row.Session, reason); err != nil {
+		t.Fatal(err)
+	}
+	snapshot := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	if err = s.ResolveConfirmedStaleQuoteLock("42", row.Session, row.ID, "daily loss limit reached", snapshot, 1, 2); err == nil {
+		t.Fatal("confirmed daily lock override accepted")
+	}
+	if err = s.ResolveConfirmedStaleQuoteLock("42", row.Session, row.ID, reason, "invalid", 1, 2); err == nil {
+		t.Fatal("invalid snapshot accepted")
+	}
+	active := ExecRow{ID: "uncertain", Account: "42", Session: row.Session, State: "uncertain", Payload: "unresolved"}
+	if err = s.ReserveExecution(active); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.ResolveConfirmedStaleQuoteLock("42", row.Session, row.ID, reason, snapshot, 1, 2); err == nil {
+		t.Fatal("confirmation bypassed unresolved local intent")
+	}
+	active.State = "rejected"
+	if err = s.SaveExecution(active); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.ResolveConfirmedStaleQuoteLock("42", row.Session, row.ID, reason, snapshot, 1, 2); err != nil {
+		t.Fatal(err)
+	}
+	if lock, _ := s.ExecutionLock("42", row.Session); lock != "" {
+		t.Fatal("confirmed exact lock retained")
+	}
+	rows, err := s.Executions()
+	if err != nil || len(rows) != 2 {
+		t.Fatal("execution history changed", err)
+	}
+	found := false
+	for _, got := range rows {
+		if got.ID == row.ID {
+			found = true
+			if got.Payload != row.Payload || got.State != "closed" {
+				t.Fatal("review rewrote execution")
+			}
+		}
+	}
+	if !found {
+		t.Fatal("closed execution removed")
+	}
+	if err = s.ResolveConfirmedStaleQuoteLock("42", row.Session, row.ID, reason, snapshot, 1, 2); err == nil {
+		t.Fatal("confirmation replayed")
+	}
+}

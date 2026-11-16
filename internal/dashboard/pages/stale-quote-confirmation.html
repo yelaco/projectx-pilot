@@ -1,0 +1,22 @@
+{{define "stale-quote-confirmation"}}
+{{with .StaleQuoteConfirmation}}
+<section class="panel" role="region" aria-label="Confirm existing account exposure">
+{{if .Reason}}<h2>Confirm account lock review</h2><p class="error">Exact lock: {{.Reason}}</p>{{else}}<h2>Your account still has open exposure</h2>{{end}}
+<p><strong>Account #{{.AccountID}}: {{len .Positions}} open position(s), {{len .Orders}} working order(s).</strong></p>
+{{range .Positions}}<p>Position #{{.ID}} · {{.ContractID}} · {{.Size}} contracts · {{if eq .Type 1}}long{{else if eq .Type 2}}short{{else}}direction {{.Type}}{{end}} · average entry {{.AveragePrice}}</p>{{end}}
+{{range .Orders}}<p>Working order #{{.ID}} · {{.ContractID}} · {{.Size}} contracts · filled {{.FillVolume}}</p>{{end}}
+<p>You can leave these positions and orders open and {{if .Reason}}acknowledge only this reviewed account fault lock{{else}}clear only the obsolete stale-quote lock{{end}}. This does not adopt or change existing positions, verify their current protection, arm automation, or replay an alert. New entries still require a flat account with no working orders.</p>
+<form method="post" action="{{$.StaleQuoteConfirmationAction}}">
+<input type="hidden" name="csrf" value="{{$.CSRF}}">
+<input type="hidden" name="account_id" value="{{.AccountID}}">
+<input type="hidden" name="intent_id" value="{{.IntentID}}">
+<input type="hidden" name="review_confirmed" value="yes">
+<input type="hidden" name="exposure_confirmation" value="{{.Token}}">
+<label class="checkbox"><input type="checkbox" name="exposure_confirmed" value="yes" required> I acknowledge these open positions and working orders. Leave them untouched and {{if .Reason}}acknowledge only the displayed account lock{{else}}clear only the old stale-quote lock{{end}}.</label>
+<label>Current admin password<input type="password" name="current_password" autocomplete="current-password" required></label>
+<button type="submit">Confirm — leave positions open and clear this lock</button>
+<a href="{{if or (eq $.StaleQuoteConfirmationAction "/execution/review-stale-quote-lock") (eq $.StaleQuoteConfirmationAction "/execution/review-fault-lock")}}/execution{{else}}/runners{{end}}">Keep lock and go back</a>
+<p class="footnote">Confirmation expires {{.Expires}}. The account is checked again; changes require a new review. Trading remains paused.</p>
+</form></section>
+{{end}}
+{{end}}

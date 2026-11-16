@@ -46,6 +46,7 @@ type Update struct {
 	ClearCredentials bool
 }
 type Manager struct {
+	tradingReports              *attention.Discord
 	notifications               *attention.Discord
 	userHub                     *realtime.UserHub
 	fleet                       *fleet.Fleet

@@ -400,7 +400,7 @@ func (m *Manager) ReviewOneWayOCOLock(ctx context.Context, actor, password, inte
 	return m.executor.ReviewOneWayOCOLock(reviewCtx, m.executionConfig.AccountID, intentID)
 }
 
-func (m *Manager) ReviewStaleQuoteLock(ctx context.Context, actor, password, intentID string) error {
+func (m *Manager) ReviewStaleQuoteLock(ctx context.Context, actor, password, intentID string, confirmation ...string) error {
 	if err := m.reauthorize(actor, password); err != nil {
 		return err
 	}
@@ -411,7 +411,7 @@ func (m *Manager) ReviewStaleQuoteLock(ctx context.Context, actor, password, int
 	}
 	reviewCtx, cancel := context.WithTimeout(ctx, 25*time.Second)
 	defer cancel()
-	return m.executor.ReviewStaleQuoteLock(reviewCtx, m.executionConfig.AccountID, intentID)
+	return m.executor.ReviewStaleQuoteLock(reviewCtx, m.executionConfig.AccountID, intentID, confirmation...)
 }
 
 // ExecutionLockInfo reports the application's durable lock, never firm permission.
@@ -424,4 +424,16 @@ func (m *Manager) ExecutionLockInfo() (string, string, error) {
 	}
 	reason, err := m.executionStore.ExecutionLock(strconv.FormatInt(m.executionConfig.AccountID, 10), date)
 	return date, reason, err
+}
+
+func (m *Manager) ReviewFaultLock(ctx context.Context, actor, password, intent, confirmation string) error {
+	if err := m.reauthorize(actor, password); err != nil {
+		return err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.executionConfig.AccountID <= 0 {
+		return errors.New("select the Practice execution account first")
+	}
+	return m.executor.ReviewFaultLock(ctx, m.executionConfig.AccountID, intent, confirmation)
 }

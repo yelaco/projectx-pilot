@@ -480,6 +480,11 @@ func (m *Manager) runExecutionFleet(ctx context.Context) {
 		wg.Add(1)
 		go func() { defer wg.Done(); m.notifications.Run(ctx) }()
 	}
+	if m.tradingReports != nil {
+		wg.Add(2)
+		go func() { defer wg.Done(); m.tradingReports.Run(ctx) }()
+		go func() { defer wg.Done(); m.runDailyTradingReports(ctx) }()
+	}
 	wg.Add(1)
 	go func() { defer wg.Done(); m.fleet.Run(ctx) }()
 	m.executor.Run(ctx)
@@ -564,15 +569,22 @@ func (m *Manager) ReviewRunnerOCOLock(ctx context.Context, actor, password strin
 	return m.fleet.ReviewOCOLock(ctx, account, intent)
 }
 
-func (m *Manager) ReviewRunnerStaleQuoteLock(ctx context.Context, actor, password string, account int64, intent string) error {
+func (m *Manager) ReviewRunnerStaleQuoteLock(ctx context.Context, actor, password string, account int64, intent string, confirmation ...string) error {
 	if err := m.reauthorize(actor, password); err != nil {
 		return err
 	}
-	return m.fleet.ReviewStaleQuoteLock(ctx, account, intent)
+	return m.fleet.ReviewStaleQuoteLock(ctx, account, intent, confirmation...)
 }
 
 func (m *Manager) ProfileFloor(id string) float64 {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.profileSetups[id].Floor
+}
+
+func (m *Manager) ReviewRunnerFaultLock(ctx context.Context, actor, password string, account int64, intent, confirmation string) error {
+	if err := m.reauthorize(actor, password); err != nil {
+		return err
+	}
+	return m.fleet.ReviewFaultLock(ctx, account, intent, confirmation)
 }

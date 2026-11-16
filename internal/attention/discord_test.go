@@ -148,3 +148,45 @@ func TestDisabledOrReconfiguredQueuedReportsAreNeverDeliveredLater(t *testing.T)
 	cancel()
 	<-done
 }
+
+func TestTradingWebhookIsIndependentAndUsesTradingReportContent(t *testing.T) {
+	root := t.TempDir()
+	system, err := Open(filepath.Join(root, "system.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	daily, err := OpenDaily(filepath.Join(root, "daily.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = system.Configure(true, offlineHook, false); err != nil {
+		t.Fatal(err)
+	}
+	dailyHook := "https://discord.com/api/webhooks/654321/offline-daily-token"
+	if err = daily.Configure(true, dailyHook, false); err != nil {
+		t.Fatal(err)
+	}
+	if !daily.Enqueue("Account #42 daily summary") || len(system.queue) != 0 {
+		t.Fatal("trading report crossed into system queue")
+	}
+	daily.client = &http.Client{Transport: roundTrip(func(req *http.Request) (*http.Response, error) {
+		if !strings.Contains(req.URL.Path, "offline-daily-token") || strings.Contains(req.URL.Path, "offline-test-token") {
+			t.Error("wrong webhook destination")
+		}
+		body, _ := io.ReadAll(req.Body)
+		if !strings.Contains(string(body), "daily trading report") || strings.Contains(string(body), "attention required") {
+			t.Error("trading report mislabeled")
+		}
+		return &http.Response{StatusCode: 200, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{}`))}, nil
+	})}
+	daily.send(context.Background(), dailyHook, <-daily.queue)
+	if daily.Status().LastSent.IsZero() || !system.Status().LastSent.IsZero() {
+		t.Fatal("delivery statuses mixed")
+	}
+	if err = daily.Configure(false, "", true); err != nil {
+		t.Fatal(err)
+	}
+	if !system.Status().Configured || !system.Status().Enabled {
+		t.Fatal("daily settings changed system webhook")
+	}
+}

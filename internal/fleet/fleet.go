@@ -16,7 +16,9 @@ import (
 	"time"
 
 	"github.com/yelaco/projectx-pilot/internal/execution"
+	"github.com/yelaco/projectx-pilot/internal/lockreview"
 	"github.com/yelaco/projectx-pilot/internal/risk"
+	"github.com/yelaco/projectx-pilot/internal/session"
 	"github.com/yelaco/projectx-pilot/internal/signal"
 	"github.com/yelaco/projectx-pilot/internal/storage"
 )
@@ -35,6 +37,8 @@ type Plan struct {
 func (p Plan) Targets() []int64 { return append([]int64(nil), p.Policy.AccountIDs...) }
 
 type View struct {
+	LockReason string
+	LockPolicy lockreview.Info
 	AccountID  int64
 	ProfileID  string
 	OwnerSince time.Time
@@ -232,7 +236,11 @@ func (f *Fleet) Snapshot() ([]View, bool) {
 	out := []View{}
 	for _, r := range f.accounts {
 		s, _ := r.status.Load().(execution.Status)
-		out = append(out, View{AccountID: r.id, ProfileID: r.owner, OwnerSince: r.since, Busy: r.busy.Load(), Status: s})
+		reason, err := f.store.ExecutionLock(strconv.FormatInt(r.id, 10), session.CurrentTradingDate(f.now()))
+		if err != nil {
+			reason = "Local lock status unavailable"
+		}
+		out = append(out, View{LockReason: reason, LockPolicy: lockreview.Classify(reason), AccountID: r.id, ProfileID: r.owner, OwnerSince: r.since, Busy: r.busy.Load(), Status: s})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].AccountID < out[j].AccountID })
 	return out, f.paused
@@ -740,12 +748,22 @@ func (f *Fleet) ReviewOCOLock(ctx context.Context, account int64, intent string)
 	}
 	return r.engine.ReviewOneWayOCOLock(ctx, account, intent)
 }
-func (f *Fleet) ReviewStaleQuoteLock(ctx context.Context, account int64, intent string) error {
+func (f *Fleet) ReviewStaleQuoteLock(ctx context.Context, account int64, intent string, confirmation ...string) error {
 	f.mu.Lock()
 	r := f.accounts[account]
 	f.mu.Unlock()
 	if r == nil {
 		return errors.New("automatic account runner not found")
 	}
-	return r.engine.ReviewStaleQuoteLock(ctx, account, intent)
+	return r.engine.ReviewStaleQuoteLock(ctx, account, intent, confirmation...)
+}
+
+func (f *Fleet) ReviewFaultLock(ctx context.Context, account int64, intent, confirmation string) error {
+	f.mu.Lock()
+	r := f.accounts[account]
+	f.mu.Unlock()
+	if r == nil {
+		return errors.New("automatic account runner not found")
+	}
+	return r.engine.ReviewFaultLock(ctx, account, intent, confirmation)
 }

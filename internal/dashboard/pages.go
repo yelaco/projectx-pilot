@@ -60,7 +60,7 @@ func actionPage(path, id string) string {
 		return "/execution"
 	}
 	switch path {
-	case "/fleet/review-stale-quote", "/fleet/review-oco", "/fleet/pause", "/fleet/resume", "/fleet/flatten", "/fleet/account-pause", "/fleet/account-flatten":
+	case "/fleet/review-fault", "/fleet/review-stale-quote", "/fleet/review-oco", "/fleet/pause", "/fleet/resume", "/fleet/flatten", "/fleet/account-pause", "/fleet/account-flatten":
 		return "/runners"
 	case "/operation-days", "/news-refresh":
 		return "/operation-days"
@@ -92,7 +92,7 @@ func actionPage(path, id string) string {
 		return "/settings/webhooks"
 	case "/admin-access":
 		return "/settings/access"
-	case "/settings", "/attention-settings":
+	case "/settings", "/attention-settings", "/trading-report-settings":
 		return "/settings"
 	default:
 		return "/"
@@ -156,19 +156,21 @@ func selectProfile(v *view, path, tab string) bool {
 
 func noticeText(key string) string {
 	return map[string]string{
-		"profile-execution": "Profile execution settings or session updated. Check readiness and current state below.",
-		"oco-reviewed":      "Known OCO checker false alarm verified; local safety lock cleared. Trading remains paused. Re-arm or Start explicitly when ready.",
-		"execution":         "Execution action completed. Inspect the monitor; an accepted order is not a fill.",
-		"trade-manager":     "Trade manager policy updated. New entries were disarmed; re-arm to apply changes.",
-		"access":            "Administrator credentials updated. If your login changed, sign in again with the new credentials.",
-		"delivery":          "Delivery updated. No order was submitted.",
-		"signal":            "Signal validated and queued for local review.",
-		"review":            "Review saved. No order was submitted.",
-		"automation":        "Automation profiles updated.",
-		"permission":        "Account permission saved. Arming and local approval are still required.",
-		"saved":             "Connection settings saved. A refresh is queued.",
-		"refresh":           "Connection refresh queued.",
-		"ingress":           "Webhook settings saved.",
+		"profile-execution":    "Profile execution settings or session updated. Check readiness and current state below.",
+		"fault-lock-reviewed":  "The reviewed account fault lock was acknowledged. Positions/orders and execution history remain unchanged; trading stays paused. Existing exposure still blocks new entries.",
+		"stale-quote-reviewed": "Old stale-quote lock cleared. Existing positions and orders were left untouched; trading remains paused. Start remains a separate action and entries require a flat account with no working orders.",
+		"oco-reviewed":         "Known OCO checker false alarm verified; local safety lock cleared. Trading remains paused. Re-arm or Start explicitly when ready.",
+		"execution":            "Execution action completed. Inspect the monitor; an accepted order is not a fill.",
+		"trade-manager":        "Trade manager policy updated. New entries were disarmed; re-arm to apply changes.",
+		"access":               "Administrator credentials updated. If your login changed, sign in again with the new credentials.",
+		"delivery":             "Delivery updated. No order was submitted.",
+		"signal":               "Signal validated and queued for local review.",
+		"review":               "Review saved. No order was submitted.",
+		"automation":           "Automation profiles updated.",
+		"permission":           "Account permission saved. Arming and local approval are still required.",
+		"saved":                "Connection settings saved. A refresh is queued.",
+		"refresh":              "Connection refresh queued.",
+		"ingress":              "Webhook settings saved.",
 	}[key]
 }
 

@@ -12,7 +12,7 @@ import (
 
 func executionAction(path string) bool {
 	switch path {
-	case "/execution/review-stale-quote-lock", "/execution/review-oco-lock", "/execution/ticket", "/execution/settings", "/execution/arm", "/execution/pause", "/execution/preview", "/execution/submit", "/execution/flatten":
+	case "/execution/review-fault-lock", "/execution/review-stale-quote-lock", "/execution/review-oco-lock", "/execution/ticket", "/execution/settings", "/execution/arm", "/execution/pause", "/execution/preview", "/execution/submit", "/execution/flatten":
 		return true
 	}
 	return false
@@ -29,7 +29,17 @@ func handleExecution(r *http.Request, m *admin.Manager, actor string) error {
 		if r.PostForm.Get("review_confirmed") != "yes" {
 			return errors.New("confirm review of the stale-quote lock")
 		}
-		return m.ReviewStaleQuoteLock(r.Context(), actor, password, r.PostForm.Get("intent_id"))
+		confirmation, err := staleQuoteConfirmationToken(r)
+		if err != nil {
+			return err
+		}
+		return m.ReviewStaleQuoteLock(r.Context(), actor, password, r.PostForm.Get("intent_id"), confirmation)
+	case "/execution/review-fault-lock":
+		confirmation, err := staleQuoteConfirmationToken(r)
+		if err != nil {
+			return err
+		}
+		return m.ReviewFaultLock(r.Context(), actor, password, r.PostForm.Get("intent_id"), confirmation)
 	case "/execution/ticket":
 		quantity, err := strconv.Atoi(r.PostForm.Get("quantity"))
 		if err != nil {
@@ -194,4 +204,12 @@ func optionalFloor(value string) (float64, error) {
 		return 0, nil
 	}
 	return strconv.ParseFloat(value, 64)
+}
+
+func staleQuoteConfirmationToken(r *http.Request) (string, error) {
+	token := r.PostForm.Get("exposure_confirmation")
+	if token != "" && r.PostForm.Get("exposure_confirmed") != "yes" {
+		return "", errors.New("confirm that existing positions and working orders will remain open before clearing this lock")
+	}
+	return token, nil
 }

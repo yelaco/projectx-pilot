@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/yelaco/projectx-pilot/internal/lockreview"
 	"github.com/yelaco/projectx-pilot/internal/projectx"
 	"github.com/yelaco/projectx-pilot/internal/realtime"
 	"github.com/yelaco/projectx-pilot/internal/risk"
@@ -21,6 +22,8 @@ import (
 )
 
 type Engine struct {
+	faultLockReview          *faultLockChallenge
+	staleQuoteReview         *staleQuoteChallenge
 	ready                    chan struct{}
 	observer                 func(Status)
 	monitorInterval          func() time.Duration
@@ -176,8 +179,15 @@ func (e *Engine) lock(i *Intent, why string) {
 	}
 	e.message = why
 	i.Message = why
+	i.LockReason = why
+	if lockreview.IsRisk(why) {
+		i.RiskLockReason = why
+	}
 	if err := e.store.LockExecution(strconv.FormatInt(i.AccountID, 10), i.Session, why); err != nil {
 		e.message = "lockout persistence failed; stop service and manage account in TopstepX"
+	} else if actual, err := e.store.ExecutionLock(strconv.FormatInt(i.AccountID, 10), i.Session); err == nil && lockreview.IsRisk(actual) {
+		i.RiskLockReason = actual
+		i.LockReason = actual
 	}
 }
 func (e *Engine) connect(account int64) error {

@@ -278,6 +278,7 @@ func (e *Engine) reconcile(ctx context.Context, i *Intent) error {
 		}
 	}
 	if i.Policy.PerTradeOnly {
+		i.AcknowledgedLockActive = false
 		return e.persist(i)
 	}
 	q, err := e.quotes.Get(i.Contract.ID)
@@ -300,6 +301,7 @@ func (e *Engine) reconcile(ctx context.Context, i *Intent) error {
 		i.HaltKind = "fault"
 		return e.requireAttention(i, "liquidation buffer reached")
 	}
+	i.AcknowledgedLockActive = false
 	return e.persist(i)
 }
 func side(direction string) int {
@@ -411,6 +413,11 @@ func (e *Engine) requireAttentionWithKind(i *Intent, why, kind string) error {
 	e.runRequested = false
 	if i.HaltKind == "daily_limit" {
 		i.State = "risk-lockout"
+	}
+	if i.AcknowledgedLockActive && i.AcknowledgedLockReason == why && i.RiskLockReason == "" && !i.EmergencyAttempted && i.AcknowledgedLockSnapshot == reviewSnapshot(i.ObservedPositions, i.ObservedOrders) {
+		e.disarm()
+		i.Message = why + ". This exact exposure was acknowledged; account unchanged. New entries remain paused until reconciliation and flatness."
+		return e.persist(i)
 	}
 	e.lock(i, why)
 	i.Message = why + ". No automatic closing or protective-order changes requested; operator attention required."

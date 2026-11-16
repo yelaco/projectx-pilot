@@ -78,7 +78,13 @@ type Authorization struct {
 	AccountName       string
 }
 type Intent struct {
-	ExposureObserved bool `json:",omitempty"`
+	LockReason               string    `json:",omitempty"`
+	RiskLockReason           string    `json:",omitempty"`
+	AcknowledgedLockActive   bool      `json:",omitempty"`
+	AcknowledgedLockReason   string    `json:",omitempty"`
+	AcknowledgedLockSnapshot string    `json:",omitempty"`
+	AcknowledgedLockAt       time.Time `json:",omitempty"`
+	ExposureObserved         bool      `json:",omitempty"`
 	// Historical evidence only. Never substitutes for fresh reconciliation or authorizes mutation.
 	VerifiedPosition   *projectx.Position `json:",omitempty"`
 	VerifiedAt         time.Time          `json:",omitempty"`
