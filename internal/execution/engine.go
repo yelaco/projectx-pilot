@@ -411,7 +411,12 @@ func (e *Engine) size(ctx context.Context, s signal.Signal, contract string) (ri
 			return empty, c, err
 		}
 	}
-	if !strings.HasSuffix(c.SymbolID, "."+s.Symbol) {
+	// Automatic alerts use the locally pinned contract; their symbol is a
+	// profile routing key, not a broker contract selector.
+	if c.ID != contract {
+		return empty, c, errors.New("contract metadata does not match selected contract")
+	}
+	if !e.config.Automated && !strings.HasSuffix(c.SymbolID, "."+s.Symbol) {
 		return empty, c, errors.New("contract does not match signal symbol")
 	}
 	if len(positions) != 0 || len(orders) != 0 {

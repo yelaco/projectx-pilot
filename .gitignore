@@ -6,3 +6,5 @@ config/local.yaml
 *.db-wal
 
 /var/
+
+/node_modules/

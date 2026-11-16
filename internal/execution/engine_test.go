@@ -915,3 +915,42 @@ func TestManagerCutoffsWakeBeforeAdaptiveReconciliationBackstop(t *testing.T) {
 		t.Fatal("limit expiry hidden by backstop", delay)
 	}
 }
+
+func TestAutomationRoutingSymbolUsesPinnedContract(t *testing.T) {
+	for _, automated := range []bool{false, true} {
+		t.Run(fmt.Sprint(automated), func(t *testing.T) {
+			e, api, _, _, c, p, a, s, _ := fixture(t)
+			c.Automated = automated
+			if automated {
+				c.AutomationProfileID = "swift"
+				c.AutomationContractID = "mnq"
+				a.AutomationConfirmed = true
+			}
+			if err := e.Arm(context.Background(), c, p, a); err != nil {
+				t.Fatal(err)
+			}
+			s.Symbol = "NQ"
+			if automated {
+				if err := e.ExecuteAutomation(context.Background(), "swift", s, "wrong-contract", 2); err == nil {
+					t.Fatal("accepted unpinned contract")
+				}
+				if len(api.requests) != 0 {
+					t.Fatal("placed unpinned contract")
+				}
+				if err := e.ExecuteAutomation(context.Background(), "swift", s, "mnq", 2); err != nil {
+					t.Fatal(err)
+				}
+				if len(api.requests) != 1 || api.requests[0].ContractID != "mnq" {
+					t.Fatalf("wrong placement: %+v", api.requests)
+				}
+			} else {
+				if _, err := e.PrepareOrder(context.Background(), s, "mnq", 2, 1); err == nil {
+					t.Fatal("manual ticket accepted mismatched symbol")
+				}
+				if len(api.requests) != 0 {
+					t.Fatal("manual preview placed order")
+				}
+			}
+		})
+	}
+}

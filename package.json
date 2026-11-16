@@ -1,0 +1,7 @@
+{
+  "name": "projectx-pilot-ui-checks",
+  "private": true,
+  "description": "Development-only DOM regression tests; the app has no Node runtime dependency.",
+  "scripts": {"test:ui": "node --test scripts/dashboard-ui.test.mjs"},
+  "devDependencies": {"linkedom": "0.18.15"}
+}

@@ -99,19 +99,44 @@ function renderSystemHealth(health) {
  filterSystemHealth();
 }
 filterSystemHealth();
+function updateRunnerLock(row,runner) {
+ const reason=runner.LockReason || '';
+ const summary=row.querySelector('[data-runner-lock-summary]');
+ if(summary){summary.textContent=reason?'Local lock: '+reason:'No current-session lock.';summary.classList.toggle('error',!!reason);}
+ const guidance=row.querySelector('[data-runner-lock-guidance]');if(guidance)guidance.textContent=reason?[(runner.LockPolicy || {}).Category,(runner.LockPolicy || {}).Guidance].filter(Boolean).join(' · '):'';
+ let matching=0;
+ for(const control of row.querySelectorAll('[data-lock-review]')){
+  const intent=(runner.Status?.Intents || []).find(i=>i.ID===control.dataset.lockIntent);
+  const matches=!!reason&&reason===control.dataset.lockReason&&runner.LockSession===control.dataset.lockSession&&intent?.Session===runner.LockSession;
+  // Never offer a form after its actual lock/session disappears. Preserve an
+  // unchanged active form so a polling refresh cannot erase typed passwords.
+  if(!matches){control.remove();}else{matching++;}
+ }
+ const changed=row.querySelector('[data-runner-lock-changed]');if(changed)changed.hidden=!reason||matching>0||reason==='Local lock status unavailable';
+ const history=row.querySelector('[data-runner-history]');if(history){history.replaceChildren();for(const intent of runner.Status?.Intents || []){if(!intent.HaltReason)continue;const entry=document.createElement('p');entry.textContent='Order #'+intent.OrderID+' · '+intent.Session+' · '+intent.HaltReason;history.appendChild(entry);}}
+}
+function updateReportStatus(channel,status){
+ if(!status)return;
+ const summary=document.querySelector('[data-report-summary="'+channel+'"]');if(summary)summary.textContent=(status.Configured?'Webhook saved.':'No webhook configured.')+' '+(status.Enabled?'Reports enabled.':'Reports disabled.');
+ const error=document.querySelector('[data-report-error="'+channel+'"]');if(error){error.textContent=status.LastError || '';error.hidden=!status.LastError;}
+ const last=document.querySelector('[data-report-last="'+channel+'"]');if(last)last.textContent=status.LastSent&&!status.LastSent.startsWith('0001')?'Last confirmed delivery: '+status.LastSent+' UTC':'No confirmed delivery yet.';
+ const dropped=document.querySelector('[data-report-dropped="'+channel+'"]');if(dropped){dropped.textContent=(status.Dropped || 0)+' reports could not be queued earlier in this process (history).';dropped.hidden=!status.Dropped;}
+}
 const monitorInterval = document.querySelector('#connection-log-rows, [data-monitor="execution-state"], [data-profile-arming], #target-job-rows') ? 3000 : 10000;
 async function monitor() {
   if (!document.hidden) {
     const healthPage=!!document.querySelector('#system-health-checks');
     const controller=new AbortController();
-    const deadline=healthPage?setTimeout(()=>controller.abort(),4000):null;
+    const deadline=setTimeout(()=>controller.abort(),healthPage?4000:15000);
     try {
       const response = await fetch(healthPage?'/api/system-health':'/api/monitor', {credentials:'same-origin', cache:'no-store',signal:controller.signal});
       if (!response.ok) throw new Error('unavailable');
       const v = await response.json();
+ document.querySelectorAll('[data-live-stale]').forEach(node=>node.hidden=true);
  if(healthPage){renderSystemHealth(v);setTimeout(monitor,monitorInterval);return;}
-      put('execution-state', v.Execution?.State || 'idle');
-      put('execution-mode', v.Execution?.RunRequested ? 'Automation running' : v.Execution?.Armed ? (v.Execution?.Automated ? 'Automatic trading active' : 'Manual trading active') : v.Execution?.Configured ? 'Execution configured · paused' : 'Read-only mode');
+      const execution = document.querySelector('[data-execution-scope="manual"]') ? v.ManualExecution : v.Execution;
+      put('execution-state', execution?.State || 'idle');
+      put('execution-mode', v.Execution?.ModeLabel || (v.Execution?.RunRequested ? 'Automation running' : v.Execution?.Armed ? (v.Execution?.Automated ? 'Automatic trading active' : 'Manual trading active') : v.Execution?.Configured ? 'Execution configured · paused' : 'Read-only mode'));
       document.querySelectorAll('[data-profile-arming]').forEach(node => {
         const state = v.Profiles ? (v.Profiles[node.dataset.profileArming] || {}) : v.Execution;
         const running = state?.RunRequested && state?.RunProfileID === node.dataset.profileArming;
@@ -120,9 +145,11 @@ async function monitor() {
         const otherRun = state?.RunRequested && state.RunProfileID !== node.dataset.profileArming;
         const otherArmed = state?.Armed && state.Automated && !active;
         node.textContent = running ? state.RunMessage : active ? 'Session active' : otherRun ? 'Blocked · automation ' + state.RunProfileID + ' is running' : otherArmed ? 'Blocked · automation ' + state.AutomationProfileID + ' is armed' : state?.Armed && !state.Automated ? 'Paused · manual Practice session armed' : reason && reason !== 'Paused' ? 'Paused · ' + reason : 'Paused';
-        document.querySelectorAll('[data-profile-start]').forEach(form => { if (form.dataset.profileStart === node.dataset.profileArming) form.hidden = running; });
+        document.querySelectorAll('[data-profile-start]').forEach(form => { if (form.dataset.profileStart === node.dataset.profileArming) form.hidden = running || active; });
         document.querySelectorAll('[data-profile-pause]').forEach(form => { if (form.dataset.profilePause === node.dataset.profileArming) form.hidden = !running && !active; });
       });
+      document.querySelectorAll('[data-profile-summary]').forEach(node=>{const status=v.Profiles?.[node.dataset.profileSummary] || {};node.textContent=status.RunRequested?'Running':status.Armed?'Armed':node.dataset.routingMode==='automatic'?'Paused':'Review only';});
+      updateReportStatus('system',v.SystemReports);updateReportStatus('trading',v.TradingReports);
       const outcomes = document.querySelector('#automation-outcomes');
       if (outcomes) {
         outcomes.replaceChildren();
@@ -133,19 +160,21 @@ async function monitor() {
         }
         if (!outcomes.children.length) outcomes.textContent = 'No automatic alerts processed.';
       }
- put('execution-exposure', (v.Execution?.Orders || 0) + ' / ' + (v.Execution?.Positions || 0));
+ put('execution-exposure', (execution?.Orders || 0) + ' / ' + (execution?.Positions || 0));
  const gate = document.querySelector('[data-global-gate]');
  if (gate) gate.textContent = v.GlobalPaused ? 'Global pause active' : 'Global entry gate open';
+ document.querySelectorAll('[data-global-resume]').forEach(form=>form.hidden=!v.GlobalPaused);
  const userStream = document.querySelector('[data-user-stream]');
  if (userStream) userStream.textContent = (v.UserData?.State || 'Unavailable') + ' · ' + (v.UserData?.Accounts || 0) + ' subscribed accounts';
  for (const runner of v.Runners || []) {
    const row = document.querySelector('[data-runner="' + runner.AccountID + '"]');
    if (!row) continue;
+   updateRunnerLock(row,runner);
    const status = runner.Status || {};
    const state = row.querySelector('[data-runner-state]');
    if (state) state.textContent = (runner.Busy ? 'Processing delivery' : status.Armed ? 'Armed' : status.RunRequested ? 'Waiting' : 'Paused / recovery') + ' · ' + (status.RunMessage || '');
    const management = row.querySelector('[data-runner-management]');
-   if (management) management.textContent = [status.Error || '', status.SubmissionDetail?.Reason ? 'ProjectX rejection reason: ' + status.SubmissionDetail.Reason : '', ...(status.Intents || []).filter(i => !['closed','cancelled','rejected'].includes(i.State)).map(i => (i.Signal?.symbol || '') + ' ' + i.State + ' · order #' + i.OrderID + ' · ' + i.Message)].join(' ');
+   if (management) management.textContent = [status.Error || '', status.SubmissionDetail?.Reason ? 'ProjectX rejection reason: ' + status.SubmissionDetail.Reason : '', ...(status.Intents || []).filter(i => !['closed','cancelled','rejected'].includes(i.State)).map(i => (i.Signal?.symbol || '') + ' ' + (i.Signal?.direction || '') + ' ' + i.State + ' · order #' + i.OrderID + ' · ' + i.Message)].join(' ');
  }
  const targets = document.querySelector('#target-job-rows');
  if (targets) {
@@ -159,9 +188,9 @@ async function monitor() {
      targets.appendChild(tr);
    }
  }
- put('execution-observed', v.Execution?.ObservedAt || 'Not observed');
- put('execution-message', v.Execution?.Message || '');
- document.querySelectorAll('[data-submission-reason]').forEach(node => { const detail=v.Execution?.SubmissionDetail; node.textContent=detail?.IntentID===node.dataset.submissionReason ? 'ProjectX rejection reason: ' + detail.Reason : ''; });
+ put('execution-observed', execution?.ObservedAt || 'Not observed');
+ put('execution-message', execution?.Message || '');
+ document.querySelectorAll('[data-submission-reason]').forEach(node => { const scope=node.closest('[data-profile-execution-scope]'); const detail=scope ? v.Profiles?.[scope.dataset.profileExecutionScope]?.SubmissionDetail : execution?.SubmissionDetail; node.textContent=detail?.IntentID===node.dataset.submissionReason ? 'ProjectX rejection reason: ' + detail.Reason : ''; });
  put('connection', v.State.connected ? 'Connected' : 'Not connected');
       put('account-name', v.State.selected_account?.name || 'Not selected');
       put('account-balance', v.State.selected_account ? new Intl.NumberFormat('en-US', {style:'currency', currency:'USD'}).format(v.State.selected_account.balance) : '—');
@@ -197,7 +226,7 @@ async function monitor() {
         }
         filterActivity();
       }
-    } catch { put('monitor-health', 'Monitoring update failed. Reload or check the local service.'); put('connection-log-health', 'Log update failed. Check the local admin service.'); const stale=document.querySelector('#health-stale-warning');if(stale)stale.hidden=false; } finally {if(deadline)clearTimeout(deadline);}
+    } catch { document.querySelectorAll('[data-live-stale]').forEach(node=>node.hidden=false); put('monitor-health', 'Monitoring update failed. Reload or check the local service.'); put('connection-log-health', 'Log update failed. Check the local admin service.'); const stale=document.querySelector('#health-stale-warning');if(stale)stale.hidden=false; } finally {if(deadline)clearTimeout(deadline);}
   }
   setTimeout(monitor, monitorInterval);
 }

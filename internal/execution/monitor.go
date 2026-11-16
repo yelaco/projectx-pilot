@@ -65,6 +65,9 @@ func (e *Engine) Run(ctx context.Context) {
 					_ = e.persist(i)
 				} else {
 					e.lastReconcileSuccess = e.now().UTC()
+					if !i.AttentionRequired && e.reconcileError != "" && e.message == e.reconcileError {
+						e.message = ""
+					}
 					e.reconcileError = ""
 				}
 			}

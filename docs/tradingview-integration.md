@@ -72,3 +72,5 @@ This is local cancellation, not a broker-side expiry parameter: the laptop and
 API connection must remain available. A racing fill or network outage can prevent
 cancellation at the exact deadline. Uncertain states block new entries and are
 reconciled; no new entry is automatically replayed.
+
+Automatic profile instrument names are alert-routing keys. Once strategy and instrument scope match the profile, execution uses that profile’s explicitly selected, pinned contract ID; the alert symbol need not equal the broker contract’s symbol (for example, NQ alerts may route to a selected MNQ contract). Entry, stop and target prices are used directly, without price conversion. Authoritative active-contract metadata, selected-contract identity, tick validation, quote deviation, sizing and all account/session checks remain mandatory. Changing the pinned contract requires editing the profile; no automatic rollover occurs. Manual Practice tickets retain contract-to-symbol matching.

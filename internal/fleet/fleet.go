@@ -37,13 +37,14 @@ type Plan struct {
 func (p Plan) Targets() []int64 { return append([]int64(nil), p.Policy.AccountIDs...) }
 
 type View struct {
-	LockReason string
-	LockPolicy lockreview.Info
-	AccountID  int64
-	ProfileID  string
-	OwnerSince time.Time
-	Busy       bool
-	Status     execution.Status
+	LockSession string
+	LockReason  string
+	LockPolicy  lockreview.Info
+	AccountID   int64
+	ProfileID   string
+	OwnerSince  time.Time
+	Busy        bool
+	Status      execution.Status
 }
 type task struct {
 	job    storage.TargetJob
@@ -234,14 +235,15 @@ func (f *Fleet) Snapshot() ([]View, bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	out := []View{}
+	lockSession := session.CurrentTradingDate(f.now())
 	for _, r := range f.accounts {
 		s, _ := r.status.Load().(execution.Status)
 		s.Quotes = s.ReadQuoteStatus()
-		reason, err := f.store.ExecutionLock(strconv.FormatInt(r.id, 10), session.CurrentTradingDate(f.now()))
+		reason, err := f.store.ExecutionLock(strconv.FormatInt(r.id, 10), lockSession)
 		if err != nil {
 			reason = "Local lock status unavailable"
 		}
-		out = append(out, View{LockReason: reason, LockPolicy: lockreview.Classify(reason), AccountID: r.id, ProfileID: r.owner, OwnerSince: r.since, Busy: r.busy.Load(), Status: s})
+		out = append(out, View{LockSession: lockSession, LockReason: reason, LockPolicy: lockreview.Classify(reason), AccountID: r.id, ProfileID: r.owner, OwnerSince: r.since, Busy: r.busy.Load(), Status: s})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].AccountID < out[j].AccountID })
 	return out, f.paused

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/yelaco/projectx-pilot/internal/app"
+	"github.com/yelaco/projectx-pilot/internal/attention"
 	"github.com/yelaco/projectx-pilot/internal/execution"
 	"github.com/yelaco/projectx-pilot/internal/fleet"
 	"github.com/yelaco/projectx-pilot/internal/realtime"
@@ -16,6 +17,7 @@ import (
 )
 
 type ExecutionMonitor struct {
+	ModeLabel                string
 	SubmissionDetail         *execution.SubmissionDetail `json:",omitempty"`
 	Configured               bool
 	RunRequested             bool
@@ -30,26 +32,28 @@ type ExecutionMonitor struct {
 	ObservedAt               time.Time
 }
 type Monitor struct {
-	Health                       SystemHealth
-	TargetJobs                   []storage.TargetJob
-	UserData                     realtime.UserStatus
-	Runners                      []fleet.View
-	Profiles                     map[string]execution.Status
-	GlobalPaused                 bool
-	WebhookURLs                  map[string]string
-	PublicURLKind                string
-	AutomationResults            []storage.AutomationReceipt
-	Execution                    ExecutionMonitor
-	ConnectionActivity           []storage.Activity
-	ReceivingEnabled             bool
-	PublicURL                    string
-	State                        app.Snapshot
-	Tunnel                       tunnel.Status
-	ReceiverListening            bool
-	UptimeSeconds                int64
-	DeliveryCounts, SignalCounts map[string]int
-	Activity                     []storage.Activity
-	Error                        string
+	SystemReports, TradingReports attention.Status
+	Health                        SystemHealth
+	TargetJobs                    []storage.TargetJob
+	UserData                      realtime.UserStatus
+	Runners                       []fleet.View
+	Profiles                      map[string]execution.Status
+	GlobalPaused                  bool
+	WebhookURLs                   map[string]string
+	PublicURLKind                 string
+	AutomationResults             []storage.AutomationReceipt
+	Execution                     ExecutionMonitor
+	ManualExecution               ExecutionMonitor
+	ConnectionActivity            []storage.Activity
+	ReceivingEnabled              bool
+	PublicURL                     string
+	State                         app.Snapshot
+	Tunnel                        tunnel.Status
+	ReceiverListening             bool
+	UptimeSeconds                 int64
+	DeliveryCounts, SignalCounts  map[string]int
+	Activity                      []storage.Activity
+	Error                         string
 }
 
 func (m *Manager) AttachTunnelStatus(status func() tunnel.Status) { m.tunnelStatus = status }
@@ -72,6 +76,7 @@ func (m *Manager) Note(level, component, message string) {
 	}
 }
 func (m *Manager) Monitor(ctx context.Context) Monitor {
+	manualStatus := m.executor.Status()
 	statusExecution := m.RuntimeStatus()
 	summary := ExecutionMonitor{SubmissionDetail: statusExecution.SubmissionDetail, Configured: m.ExecutionConfig().Enabled || m.FleetConfigured(), RunRequested: statusExecution.RunRequested, RunProfileID: statusExecution.RunProfileID, RunMessage: statusExecution.RunMessage, Automated: statusExecution.Automated, AutomationProfileID: statusExecution.AutomationProfileID, Armed: statusExecution.Armed, AccountID: statusExecution.AccountID, ArmedUntil: statusExecution.ArmedUntil, State: "idle", Message: statusExecution.Error}
 	if len(statusExecution.Intents) > 0 {
@@ -87,7 +92,7 @@ func (m *Manager) Monitor(ctx context.Context) Monitor {
 	}
 	routing := m.Ingress()
 	results, _ := m.AutomationResults()
-	v := Monitor{WebhookURLs: routing.WebhookURLs(), PublicURLKind: routing.PublicURLKind(), AutomationResults: results, Execution: summary, ReceivingEnabled: routing.Enabled, PublicURL: routing.PublicURL, Tunnel: tunnel.Status{State: "not managed"}}
+	v := Monitor{WebhookURLs: routing.WebhookURLs(), PublicURLKind: routing.PublicURLKind(), AutomationResults: results, Execution: summary, ManualExecution: summarizeManualExecution(manualStatus, m.ExecutionConfig().Enabled), ReceivingEnabled: routing.Enabled, PublicURL: routing.PublicURL, Tunnel: tunnel.Status{State: "not managed"}}
 	v.Runners, v.GlobalPaused = m.RunnerSnapshot()
 	v.UserData = m.UserDataStatus()
 	v.TargetJobs, _ = m.TargetResults()
@@ -97,7 +102,7 @@ func (m *Manager) Monitor(ctx context.Context) Monitor {
 	for n := range v.TargetJobs {
 		v.TargetJobs[n].Policy = ""
 	}
-	v.Profiles = m.ProfileStatuses()
+	v.Profiles = profileStatuses(v.Runners)
 	m.mu.Lock()
 	service, status := m.service, m.tunnelStatus
 	v.UptimeSeconds = int64(time.Since(m.startedAt).Seconds())
@@ -157,7 +162,10 @@ func (m *Manager) Monitor(ctx context.Context) Monitor {
 		v.ReceiverListening = response.StatusCode == 200
 		response.Body.Close()
 	}
-	v.Health = buildSystemHealth(v, m.healthMeta(), m.now())
+	meta := m.healthMeta()
+	v.SystemReports, v.TradingReports = meta.SystemReports, meta.TradingReports
+	v.Execution.ModeLabel = displayExecutionMode(statusExecution, v.Runners, summary.Configured)
+	v.Health = buildSystemHealth(v, meta, m.now())
 	return v
 }
 

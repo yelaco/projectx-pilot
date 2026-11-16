@@ -356,28 +356,12 @@ func (m *Manager) ProfileConfig(id string) execution.Config {
 }
 func (m *Manager) ProfileStatus(id string) execution.Status {
 	views, _ := m.fleet.Snapshot()
-	s := execution.Status{Intents: []execution.Intent{}, Automated: true, AutomationProfileID: id, RunProfileID: id}
-	for _, r := range views {
-		for _, i := range r.Status.Intents {
-			if i.ProfileID == id {
-				s.Intents = append(s.Intents, i)
-			}
-		}
-		if r.ProfileID != id {
-			continue
-		}
-		s.RunRequested = s.RunRequested || r.Status.RunRequested
-		s.Armed = s.Armed || r.Status.Armed
-		s.RunMessage = "Account runners active; inspect each account on Execution runners"
-		if !r.Status.Armed {
-			s.RunMessage = "Some targets are waiting or blocked; inspect Execution runners"
-		}
-		if r.Status.SubmissionDetail != nil {
-			s.SubmissionDetail = r.Status.SubmissionDetail
-		}
+	if status, ok := profileStatuses(views)[id]; ok {
+		return status
 	}
-	return s
+	return execution.Status{Intents: []execution.Intent{}, Automated: true, AutomationProfileID: id, RunProfileID: id}
 }
+
 func (m *Manager) pauseChangedProfiles(next Policies) {
 	if m.fleet == nil {
 		return
@@ -511,23 +495,9 @@ func (m *Manager) RuntimeStatus() execution.Status {
 }
 func (m *Manager) ProfileStatuses() map[string]execution.Status {
 	views, _ := m.fleet.Snapshot()
-	out := map[string]execution.Status{}
-	for _, r := range views {
-		if r.ProfileID == "" {
-			continue
-		}
-		s := out[r.ProfileID]
-		s.Automated = true
-		s.AutomationProfileID = r.ProfileID
-		s.RunProfileID = r.ProfileID
-		s.RunRequested = s.RunRequested || r.Status.RunRequested
-		s.Armed = s.Armed || r.Status.Armed
-		s.RunMessage = "Account runners active; inspect per-account readiness"
-		s.Intents = append(s.Intents, r.Status.Intents...)
-		out[r.ProfileID] = s
-	}
-	return out
+	return profileStatuses(views)
 }
+
 func (m *Manager) PauseRunner(account int64) error { m.fleet.PauseAccount(account); return nil }
 func (m *Manager) FlattenRunner(ctx context.Context, actor, password string, account int64) error {
 	if err := m.reauthorize(actor, password); err != nil {
