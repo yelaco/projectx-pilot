@@ -69,7 +69,7 @@
 
     <section id="trade-managers">
       <h2>Trade managers &amp; position sizing</h2>
-      <p>A Trade Manager supplies the account routing and risk policy. New and re-saved simplified managers enforce planned risk per trade; they do not calculate MLL or enforce cumulative daily-loss, trade-count, or portfolio limits. Existing legacy policies keep their saved limits until explicitly changed.</p>
+      <p>A Trade Manager supplies the account routing, risk policy, and recurring start/last-entry/flatten schedule in America/Chicago. New and re-saved simplified managers enforce planned risk per trade; they do not calculate MLL or enforce cumulative daily-loss, trade-count, or portfolio limits. Existing legacy policies keep their saved limits until explicitly changed.</p>
       <div class="formula"><p>Estimated risk per contract</p><code>stop ticks × tick value + slippage reserve + round-trip costs</code><p>Automatic quantity</p><code>min(maximum contracts, floor(available risk / risk per contract))</code></div>
       <p>Tick size and tick value come from authoritative contract metadata. Quantities round down to whole contracts; less than one contract is rejected. Fees, commissions, and slippage estimates are part of the budget. Actual loss can exceed planned risk during gaps or adverse execution.</p>
       <div class="callout"><strong>Risk multiplies across targets.</strong> A $150 per-trade manager targeting four accounts can plan up to $600 across that signal. Targets execute independently: one can be accepted while another is blocked or uncertain.</div>
@@ -79,12 +79,12 @@
 
     <section id="profiles">
       <h2>Automation profiles</h2>
-      <p>Each profile binds a strategy identifier, allowed instruments, Trade Manager, contract expiry, order type, webhook credentials, mappings, and saved trading setup. Keep separate strategies in separate profiles and review pinned contracts when they roll.</p>
+      <p>Each profile binds a strategy identifier, its own instrument scope, Trade Manager, contract expiry, order type, webhook credentials, mappings, and saved trading setup. There is no separate global instrument allowlist in Connection settings. Keep separate strategies in separate profiles and review pinned contracts when they roll.</p>
       <div class="two-column">
         <article class="card"><h3>Review only</h3><p>Alerts go to the inbox for local review. Reviewing or importing an alert does not submit an order.</p></article>
         <article class="card"><h3>Automatic execution</h3><p>After explicit Start and account arming, eligible new alerts run through risk checks and the execution engine without an approval click for each alert.</p></article>
       </div>
-      <p>Saving account/risk/routing changes pauses affected profiles and may require trading-setup confirmation again. Existing positions retain the policy captured when their trade was submitted. Restart always leaves profiles paused.</p>
+      <p>Saving account/risk/routing or Trade Manager schedule changes pauses affected profiles and may require trading-setup confirmation again. Existing positions retain the policy captured when their trade was submitted. Restart always leaves profiles paused.</p>
       <h3>Price mappings</h3>
       <p>Choose shared BUY/SELL placeholders or separate entry, stop-loss, and take-profit mappings per direction. Use verified indicator outputs that become numeric values. Unresolved placeholders and wrong-side stops/targets are rejected. Message templates containing delivery tokens are private; do not put them in logs, screenshots, or public issues.</p>
     </section>
@@ -122,8 +122,8 @@
       <h2>Operation days, sessions &amp; news</h2>
       <p>Use <a href="/operation-days">Operation days</a> to plan a Saturday–Friday week. General blocked dates apply to all managers; manager-specific dates add restrictions and cannot override a general block. These are saved dates, not recurring weekday rules—review each new week.</p>
       <p>The US FOMC policy-event filter uses the Forex Factory weekly feed. It refreshes automatically and retains cached events. Missing/stale coverage alone does not block a date; known cached matching event blocks remain. It is not a filter for every important US release. Manual operation-day restrictions still apply when news data is missing.</p>
-      <p>Sessions use <code>America/Chicago</code>, independently of your desktop timezone, including daylight-saving changes. Normal entries end at 15:00 Chicago and scheduled flattening is by 15:05; reviewed early-close days use additional margins. A running profile can wait through closures and reconcile into the next verified session without another click.</p>
-      <div class="callout"><strong>Calendar coverage is bounded.</strong> Continuous automation currently supports reviewed 2026 MNQ/MGC sessions. Unknown years/instruments and unsupported merged sessions cannot authorize trading. Revision: <code>{{.CalendarRevision}}</code>.</div>
+      <p>Sessions use <code>America/Chicago</code>, independently of your desktop timezone, including daylight-saving changes. The default Trade Manager accepts entries from 17:00 the previous evening until 15:00 Chicago and flattens by 15:05. Change these times in Trade managers to fit the selected products. One window applies per weekday; last entry must precede flatten by at least two minutes, and flatten must be by 15:08. Choose narrower windows for earlier closes and daily pauses. Reviewed early-close days cap the selected times with additional margins. A running profile can wait through closures and reconcile into the next verified session without another click.</p>
+      <div class="callout"><strong>Calendar coverage is bounded.</strong> The manager chooses the operating window; there is no MNQ/MGC symbol-name gate. Confirm the window fits the selected contracts’ official hours. Reviewed 2026 holiday cutoffs can only shorten it; unknown holiday years and unsupported merged sessions cannot authorize automatic trading. Revision: <code>{{.CalendarRevision}}</code>.</div>
     </section>
 
     <section id="monitoring">

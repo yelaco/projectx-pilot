@@ -26,7 +26,7 @@ func (m *Manager) SaveContinuousSetup(actor, password, id string, c execution.Co
 	if err != nil {
 		return err
 	}
-	if _, _, err = session.ContinuousWindow(m.now(), p.Instruments); err != nil {
+	if _, _, err = m.managerScheduleLocked(p.TradeManagerID).Window(m.now()); err != nil {
 		return err
 	}
 	perTrade := m.perTradeOnlyLocked(p.TradeManagerID)
@@ -148,7 +148,7 @@ func (m *Manager) reconcileContinuousLocked(ctx context.Context) error {
 		m.executor.SetRunMessage("Running · monitoring existing execution; new entries wait for reconciliation")
 		return nil
 	}
-	window, open, err := session.ContinuousWindow(m.now(), p.Instruments)
+	window, open, err := m.managerScheduleLocked(p.TradeManagerID).Window(m.now())
 	if err != nil {
 		m.executor.SetRunMessage("Running · waiting: " + err.Error())
 		return nil
@@ -198,4 +198,14 @@ func (m *Manager) perTradeOnlyLocked(id string) bool {
 		}
 	}
 	return false
+}
+
+// Retained legacy controller uses the same Trade Manager schedule as the fleet.
+func (m *Manager) managerScheduleLocked(id string) session.Schedule {
+	for _, p := range m.policies.TradeManagers {
+		if p.ID == id {
+			return p.TradingSchedule()
+		}
+	}
+	return session.DefaultSchedule()
 }

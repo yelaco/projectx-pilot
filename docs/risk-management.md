@@ -25,3 +25,7 @@ calendar covering other releases. Existing position management remains active.
 ## Concurrent account budgets
 
 A Trade Manager may route to up to 20 explicit accounts. The planned risk ceiling applies separately to each account, so a $150 manager with four targets can plan up to $600 across that signal. There is no aggregate portfolio budget for per-trade-only policies. Each account must be flat and have no other working/uncertain intent. One profile owns each running account. Legacy fixed-floor managers remain single-account: one manually confirmed floor cannot safely represent several balances. A target that fails risk/eligibility is blocked independently, without rolling back accepted targets. Full target claims and original policies remain durable across configuration changes.
+
+## Trade Manager trading windows
+
+A policy also owns its recurring weekday entry/flatten schedule in America/Chicago. It applies to automatic entries and narrows manual Practice authorization. The default is 17:00 start, 15:00 last entry and 15:05 flatten; configured earlier windows cover products with earlier closes or pauses. Holiday caps cannot widen a manager window. A schedule is operating configuration, not product availability data or permission to bypass an unknown holiday year. Schedule changes require renewed profile setup scope and never modify an existing trade's captured policy/window.

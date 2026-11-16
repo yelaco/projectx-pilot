@@ -42,6 +42,8 @@ func Save(path string, c Config) error {
 	if err := c.Validate(); err != nil {
 		return err
 	}
+	// Drop the retired global allowlist when an older configuration is saved.
+	c.AllowedInstruments = nil
 	b, err := yaml.Marshal(c)
 	if err != nil {
 		return err

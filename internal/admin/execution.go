@@ -278,7 +278,7 @@ func (m *Manager) PreviewExecution(ctx context.Context, profileID, contract, pay
 		}
 		return false
 	}
-	if !allowed(m.c.AllowedInstruments) || !allowed(profile.Instruments) {
+	if !allowed(profile.Instruments) {
 		return errors.New("instrument is not allowed")
 	}
 	if strings.TrimSpace(contract) == "" {
@@ -321,23 +321,14 @@ func (m *Manager) PreviewTicket(ctx context.Context, contract, direction string,
 	var symbol string
 	if m.service != nil {
 		for _, c := range m.service.Snapshot().Contracts {
-			if c.ID == contract {
-				for _, root := range m.c.AllowedInstruments {
-					if c.ActiveContract && strings.HasSuffix(c.SymbolID, "."+root) {
-						symbol = root
-					}
-				}
+			if c.ID == contract && c.ActiveContract {
+				symbol = c.RootSymbol()
+				break
 			}
 		}
 	}
-	allowed := false
-	for _, root := range m.c.AllowedInstruments {
-		if root == symbol {
-			allowed = true
-		}
-	}
-	if symbol == "" || !allowed {
-		return errors.New("select a discovered active contract allowed by configuration")
+	if symbol == "" {
+		return errors.New("select a discovered active contract with valid symbol metadata")
 	}
 	s, err := m.executor.TicketSignal(ctx, "practice-api-test", symbol, direction, contract, orderType, entry, stopTicks, targetTicks)
 	if err != nil {

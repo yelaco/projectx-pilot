@@ -26,6 +26,8 @@ func TestLocalSignalImportReviewAndRecovery(t *testing.T) {
 	if err := s.Refresh(context.Background()); err != nil {
 		t.Fatal(err)
 	}
+	// Legacy global scope does not override an explicit profile's symbols.
+	m.c.AllowedInstruments = []string{"MGC"}
 	profile := Automation{ID: "swift-mnq", Name: "Swift MNQ", Strategy: "swift-mnq-scalping", AccountID: 42, Instruments: []string{"MNQ"}, Source: "tradingview-manual"}
 	if err := m.SaveAutomation(profile); err != nil {
 		t.Fatal(err)
@@ -40,6 +42,13 @@ func TestLocalSignalImportReviewAndRecovery(t *testing.T) {
 	}
 	if m.ImportSignal(profile.ID, "wrong-contract", string(b)) == nil {
 		t.Fatal("unknown contract accepted")
+	}
+	outside := sig
+	outside.ID = "outside-profile"
+	outside.Symbol = "MGC"
+	outsideBody, _ := json.Marshal(outside)
+	if err := m.ImportSignal(profile.ID, "mnq-expiry", string(outsideBody)); err == nil {
+		t.Fatal("profile instrument restriction removed")
 	}
 	if m.ImportSignal("unknown", "mnq-expiry", string(b)) == nil {
 		t.Fatal("unknown profile accepted")

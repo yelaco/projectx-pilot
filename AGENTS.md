@@ -24,3 +24,7 @@
 - Freeze and atomically claim every target before fanout. Independent outcomes are not an atomic broker transaction; never undo accepted targets or replay blocked/interrupted ones.
 - Unix datagrams carry wake hints only after inbox commit. SQLite remains authority; socket loss falls back to bounded scans. Never accept account, credentials or execution authority through a socket notification.
 - Share JWT, contract subscriptions and request governor. Never cache fresh exposure/risk checks merely to reduce entry latency; preserve mutation budget under the documented API ceiling.
+
+- Instrument scope belongs to each automation profile and its pinned contract. Do not restore a global instrument allowlist. Ignore legacy allowed_instruments YAML; manual Practice contracts must come from active authoritative discovery. Calendar/risk/protection checks remain mandatory.
+
+- Trade Managers own recurring Chicago start/last-entry/flatten schedules. Do not use ticker names as calendar permissions. Intersect manager windows with verified authorization and reviewed holiday caps; never widen them or infer an unknown year's holidays. Schedule edits pause affected profiles and preserve existing intents' captured windows.

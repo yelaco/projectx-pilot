@@ -55,18 +55,39 @@ func (e *Engine) Run(ctx context.Context) {
 			}
 			cancel()
 		}
-		delay := 30 * time.Second
-		if e.active() != nil {
-			delay = 2 * time.Second
-		}
-		if e.monitorInterval != nil && e.active() != nil {
-			delay = e.monitorInterval()
-		}
+		delay := e.monitorDelayLocked()
 		e.publishLocked()
 		e.mu.Unlock()
 		timer.Reset(delay)
 	}
 }
+
+// Retain the low-frequency backstop, but never schedule the next observation
+// beyond a future entry, flatten or expiry deadline captured with this trade.
+func (e *Engine) monitorDelayLocked() time.Duration {
+	i := e.active()
+	if i == nil {
+		return 30 * time.Second
+	}
+	delay := 2 * time.Second
+	if e.monitorInterval != nil {
+		delay = e.monitorInterval()
+	}
+	if delay <= 0 {
+		delay = 2 * time.Second
+	}
+	age := i.Config.maxAge()
+	if i.OrderType == 1 {
+		age = 30 * time.Minute
+	}
+	for _, deadline := range []time.Time{i.Window.LastEntry, i.Window.Flatten, i.Signal.Timestamp.Add(age)} {
+		if remaining := deadline.Sub(e.now()); remaining > 0 && remaining < delay {
+			delay = remaining
+		}
+	}
+	return delay
+}
+
 func (e *Engine) reconcile(ctx context.Context, i *Intent) error {
 	history, err := e.api.Orders(ctx, i.AccountID, i.Window.StartOfSession(), e.now().UTC())
 	if err != nil {

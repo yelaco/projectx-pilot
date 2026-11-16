@@ -46,7 +46,7 @@ func TestStandaloneGuideNeedsNoRuntimeStateOrLogin(t *testing.T) {
 				}
 			}
 			if path == "/guide" {
-				for _, want := range []string{"Quick start", "Connection &amp; accounts", "Trade managers &amp; position sizing", "Webhook &amp; HTTPS delivery", "Monitoring &amp; status meanings", "Troubleshooting", "Read-only", "2026 MNQ/MGC", "/guide.css"} {
+				for _, want := range []string{"Quick start", "Connection &amp; accounts", "Trade managers &amp; position sizing", "Webhook &amp; HTTPS delivery", "Monitoring &amp; status meanings", "Troubleshooting", "Read-only", "2026 holiday cutoffs", "/guide.css"} {
 					if !strings.Contains(body, want) {
 						t.Fatal("missing guide content", want)
 					}

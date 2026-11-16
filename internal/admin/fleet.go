@@ -84,7 +84,7 @@ func (m *Manager) planLocked(id string) (fleet.Plan, error) {
 				if p.OrderType == "limit" {
 					typ = 1
 				}
-				return fleet.Plan{ProfileID: id, Strategy: p.Strategy, ContractID: p.ContractID, Instruments: append([]string(nil), p.Instruments...), Policy: manager, OrderType: typ}, nil
+				return fleet.Plan{ProfileID: id, Strategy: p.Strategy, ContractID: p.ContractID, Instruments: append([]string(nil), p.Instruments...), Policy: manager.Clone(), OrderType: typ}, nil
 			}
 		}
 		return fleet.Plan{}, errors.New("assign a Trade Manager with explicit target accounts")
@@ -130,7 +130,7 @@ func (m *Manager) SaveProfileSetup(actor, password, id string, c execution.Confi
 	if !a.PracticeConfirmed || !a.BracketsConfirmed || !a.Window.Verified {
 		return errors.New("confirm selected account(s), Auto OCO and the session calendar")
 	}
-	if _, _, err := session.ContinuousWindow(m.now(), p.Instruments); err != nil {
+	if _, _, err := p.Policy.TradingSchedule().Window(m.now()); err != nil {
 		return err
 	}
 	if c.RoundTripCosts <= 0 || math.IsNaN(c.RoundTripCosts) || math.IsInf(c.RoundTripCosts, 0) || c.RoundTripCosts > 1000 || c.SlippageTicks < 1 || c.SlippageTicks > 100 || c.MaxQuantity < 1 || c.MaxQuantity > 100 || c.MaxDeviationTicks < 0 || c.MaxDeviationTicks > 100 {
@@ -233,17 +233,6 @@ func (m *Manager) readyPlanLocked(id string) (fleet.Plan, error) {
 	p, err := m.planLocked(id)
 	if err != nil {
 		return p, err
-	}
-	for _, symbol := range p.Instruments {
-		allowed := false
-		for _, global := range m.c.AllowedInstruments {
-			if global == symbol {
-				allowed = true
-			}
-		}
-		if !allowed {
-			return p, fmt.Errorf("profile instrument %s is not enabled in Connection settings", symbol)
-		}
 	}
 	saved, ok := m.profileSetups[id]
 	if !ok || !saved.Config.Enabled || saved.ConfirmedAt.IsZero() {

@@ -3,14 +3,14 @@ package dashboard
 import (
 	"context"
 	"encoding/json"
+	"github.com/yelaco/projectx-pilot/internal/projectx"
+	"github.com/yelaco/projectx-pilot/internal/signal"
+	"github.com/yelaco/projectx-pilot/internal/storage"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
-	"github.com/yelaco/projectx-pilot/internal/projectx"
-	"github.com/yelaco/projectx-pilot/internal/signal"
-	"github.com/yelaco/projectx-pilot/internal/storage"
 	"regexp"
 	"strings"
 	"testing"
@@ -88,7 +88,7 @@ func TestAdminSettingsSecurityAndPersistence(t *testing.T) {
 		})
 	}
 	saved, err := config.Load(p)
-	if err != nil || saved.NewsFilter != "off" || saved.AccountID != 7 || len(saved.AllowedInstruments) != 2 {
+	if err != nil || saved.NewsFilter != "off" || saved.AccountID != 7 || len(saved.AllowedInstruments) != 0 {
 		t.Fatal("settings not saved", err)
 	}
 	w = httptest.NewRecorder()
@@ -257,4 +257,46 @@ func (inboxTestReader) Accounts(context.Context) ([]projectx.Account, error) {
 }
 func (inboxTestReader) AvailableContracts(context.Context) ([]projectx.Contract, error) {
 	return []projectx.Contract{{ID: "mnq-contract", SymbolID: "F.US.MNQ", TickSize: .25, TickValue: .5, ActiveContract: true}}, nil
+}
+
+func TestConnectionSettingsNoLongerRequireGlobalInstruments(t *testing.T) {
+	m, password, h := managementFixture(t)
+	page := requestAs(h, "local", password, "GET", "/settings", nil)
+	if strings.Contains(page.Body.String(), "Allowed instruments") || strings.Contains(page.Body.String(), `name="instruments"`) {
+		t.Fatal("retired global instrument input is still displayed")
+	}
+	values := url.Values{"csrf": {formCSRF(t, page)}, "account_id": {"0"}, "refresh_seconds": {"60"}, "news_filter": {"off"}, "username": {""}}
+	response := requestAs(h, "local", password, "POST", "/settings", values)
+	if response.Code != 303 {
+		t.Fatal("settings still require global instruments", response.Code, response.Body.String())
+	}
+	if m.Settings().Config.AccountID != 0 {
+		t.Fatal("monitoring selection changed")
+	}
+}
+
+type allContractReader struct{ inboxTestReader }
+
+func (allContractReader) AvailableContracts(context.Context) ([]projectx.Contract, error) {
+	return []projectx.Contract{
+		{ID: "mes", Name: "MES expiry", SymbolID: "F.US.MES", ActiveContract: true, TickSize: .25, TickValue: 1.25},
+		{ID: "old", Name: "Inactive expiry", SymbolID: "F.US.MES", ActiveContract: false},
+		{ID: "invalid", Name: "Invalid symbol metadata", SymbolID: "", ActiveContract: true},
+	}, nil
+}
+func TestPracticeTicketListsAllValidActiveContracts(t *testing.T) {
+	m, password, _ := managementFixture(t)
+	service := app.New(allContractReader{}, 0)
+	if err := service.Refresh(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	m.Attach(service)
+	h := AdminHandler(service, password, "127.0.0.1:8080", m)
+	response := requestAs(h, "local", password, "GET", "/execution", nil)
+	if response.Code != 200 || !strings.Contains(response.Body.String(), `value="mes"`) {
+		t.Fatal("active provider contract still filtered", response.Code)
+	}
+	if strings.Contains(response.Body.String(), `value="old"`) || strings.Contains(response.Body.String(), `value="invalid"`) {
+		t.Fatal("invalid/inactive contract offered for a manual ticket")
+	}
 }

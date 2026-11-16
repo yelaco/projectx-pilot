@@ -2,7 +2,6 @@
 # manual-approval additionally requires private execution settings and local arming.
 mode: read-only
 account_id: 0 # 0 discovers accounts without selecting one; choose an explicit ID
-allowed_instruments: [MNQ, MGC]
 request_timeout: 10s
 refresh_interval: 60s
 dashboard_listen: 127.0.0.1:8080

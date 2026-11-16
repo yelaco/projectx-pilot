@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -22,7 +23,7 @@ func TestDefaults(t *testing.T) {
 	}
 }
 func TestUnsafeConfig(t *testing.T) {
-	for _, s := range []string{"news_filter: unsupported", "mode: invalid", "mode: paper", "dashboard_listen: 0.0.0.0:8080", "dashboard_listen: localhost:8080", "dashboard_listen: 127.0.0.1:0", "request_timeout: 0s", "refresh_interval: 1s", "account_id: -1", "log_level: verbose", "unknown: true", "allowed_instruments: []", "allowed_instruments: [MNQ, MNQ]", "{}\n---\n{}", "mode: ["} {
+	for _, s := range []string{"news_filter: unsupported", "mode: invalid", "mode: paper", "dashboard_listen: 0.0.0.0:8080", "dashboard_listen: localhost:8080", "dashboard_listen: 127.0.0.1:0", "request_timeout: 0s", "refresh_interval: 1s", "account_id: -1", "log_level: verbose", "unknown: true", "{}\n---\n{}", "mode: ["} {
 		t.Run(s, func(t *testing.T) {
 			if _, err := loadText(t, s); err == nil {
 				t.Fatal("accepted unsafe config")
@@ -53,5 +54,25 @@ func TestInvalidOperationPlans(t *testing.T) {
 		if _, err := loadText(t, text); err == nil {
 			t.Fatal("invalid plan accepted", text)
 		}
+	}
+}
+
+func TestRetiredGlobalInstrumentsAreIgnoredAndRemovedOnSave(t *testing.T) {
+	for _, legacy := range []string{"[]", "[MNQ]", "[MNQ, MNQ]"} {
+		t.Run(legacy, func(t *testing.T) {
+			c, err := loadText(t, "allowed_instruments: "+legacy+"\n")
+			if err != nil || len(c.AllowedInstruments) != 0 {
+				t.Fatal("old global scope still required/enforced", c, err)
+			}
+			path := filepath.Join(t.TempDir(), "saved.yaml")
+			c.AllowedInstruments = []string{"MNQ"} // Direct old callers are retired too.
+			if err := Save(path, c); err != nil {
+				t.Fatal(err)
+			}
+			b, err := os.ReadFile(path)
+			if err != nil || strings.Contains(string(b), "allowed_instruments") {
+				t.Fatal("retired setting persisted", err)
+			}
+		})
 	}
 }

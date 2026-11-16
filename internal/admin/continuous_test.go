@@ -176,6 +176,10 @@ func (ticketReader) AvailableContracts(context.Context) ([]projectx.Contract, er
 }
 func TestPracticeTicketNeedsNoAutomationProfile(t *testing.T) {
 	m, _, api := continuousFixture(t, true)
+	// A retired global list must not filter active contracts in the API test.
+	m.mu.Lock()
+	m.c.AllowedInstruments = []string{"MGC"}
+	m.mu.Unlock()
 	m.PauseExecution()
 	service := app.New(ticketReader{}, 0)
 	m.Attach(service)

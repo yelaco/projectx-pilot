@@ -549,7 +549,7 @@ func TestProtectiveFailureDoesNotFlattenAnotherAccount(t *testing.T) {
 	if otherClosed != 0 || otherOrders != 1 {
 		t.Fatal("another account was flattened or cancelled")
 	}
-	w, _, err := session.ContinuousWindow(f.now(), p.Instruments)
+	w, _, err := p.Policy.TradingSchedule().Window(f.now())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -621,5 +621,82 @@ func TestCorruptRecoveryAccountFailsClosed(t *testing.T) {
 	}
 	if _, err := New(store, f.factory, nil, f.now, nil); err == nil {
 		t.Fatal("mismatched account recovery silently omitted")
+	}
+}
+
+type contractMetadataAPI struct {
+	execution.API
+	metadata projectx.Contract
+}
+
+func (a contractMetadataAPI) Contract(context.Context, string) (projectx.Contract, error) {
+	return a.metadata, nil
+}
+
+func TestManagersSelectWindowsIndependentlyOfInstrumentNames(t *testing.T) {
+	f, store, g, ctx := setup(t)
+	factory := f.factory
+	f.SetFactory(func(account int64) (execution.API, execution.Quotes, error) {
+		api, q, err := factory(account)
+		metadata := projectx.Contract{ID: "es", SymbolID: "F.US.ES", TickSize: .25, TickValue: 12.5, ActiveContract: true}
+		if account == 2 {
+			metadata = projectx.Contract{ID: "cl", SymbolID: "F.US.CL", TickSize: .01, TickValue: 10, ActiveContract: true}
+		}
+		return contractMetadataAPI{API: api, metadata: metadata}, q, err
+	})
+	equity := plan("equity", 1)
+	equity.ContractID = "es"
+	equity.Instruments = []string{"ES"}
+	equity.Policy.Schedule = &session.Schedule{Start: "08:30", LastEntry: "13:00", Flatten: "13:05"}
+	energy := plan("energy", 2)
+	energy.ContractID = "cl"
+	energy.Instruments = []string{"CL"}
+	energy.Policy.Schedule = &session.Schedule{Start: "10:00", LastEntry: "14:00", Flatten: "14:05"}
+	if err := f.Start(ctx, equity, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Start(ctx, energy, nil); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool {
+		views, _ := f.Snapshot()
+		ready, waiting := false, false
+		for _, v := range views {
+			if v.AccountID == 1 {
+				ready = v.Status.Armed
+			}
+			if v.AccountID == 2 {
+				waiting = v.Status.RunRequested && !v.Status.Armed
+			}
+		}
+		return ready && waiting
+	})
+	delivery := record(f, equity, "es-manager-schedule")
+	delivery.Signal.Symbol = "ES"
+	delivery.Signal.StopLoss = 19999
+	delivery.Signal.TakeProfit = 20002
+	if err := f.Dispatch(delivery, equity); err != nil {
+		t.Fatal(err)
+	}
+	waitFor(t, func() bool {
+		rows, _ := store.DeliveryTargets(delivery.Signal.ID)
+		return len(rows) == 1 && rows[0].State == "submitted"
+	})
+	rows, err := store.Executions()
+	if err != nil || len(rows) != 1 {
+		t.Fatal(rows, err)
+	}
+	var intent execution.Intent
+	if err := json.Unmarshal([]byte(rows[0].Payload), &intent); err != nil {
+		t.Fatal(err)
+	}
+	if intent.Window.Flatten.In(session.Chicago).Format("15:04") != "13:05" || intent.Policy.TradingSchedule().Start != "08:30" {
+		t.Fatal("manager schedule not captured in execution", intent.Window)
+	}
+	g.mu.Lock()
+	first, second := g.placed[1], g.placed[2]
+	g.mu.Unlock()
+	if first != 1 || second != 0 {
+		t.Fatal("schedule isolation failed", first, second)
 	}
 }

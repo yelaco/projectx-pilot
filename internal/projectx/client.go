@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 )
@@ -50,6 +51,26 @@ type Contract struct {
 	ActiveContract bool    `json:"activeContract"`
 	SymbolID       string  `json:"symbolId"`
 }
+
+// RootSymbol returns the signal root from the provider's symbol ID, never from
+// a contract display name or an operator-maintained global instrument list.
+func (c Contract) RootSymbol() string {
+	index := strings.LastIndexByte(c.SymbolID, '.')
+	if index < 1 {
+		return ""
+	}
+	root := c.SymbolID[index+1:]
+	if len(root) < 1 || len(root) > 16 {
+		return ""
+	}
+	for _, r := range root {
+		if !(r >= 'A' && r <= 'Z' || r >= '0' && r <= '9') {
+			return ""
+		}
+	}
+	return root
+}
+
 type Client struct {
 	metadataLoading     map[string]chan struct{}
 	metadataMu          sync.Mutex

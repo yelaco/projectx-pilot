@@ -276,3 +276,14 @@ func TestContractSingleflightCacheAndExpiry(t *testing.T) {
 		t.Fatal("expired metadata reused")
 	}
 }
+
+func TestContractRootSymbolUsesProviderMetadata(t *testing.T) {
+	for _, test := range []struct{ id, want string }{
+		{"F.US.MNQ", "MNQ"}, {"F.US.MES", "MES"}, {"F.US.6E", "6E"},
+		{"", ""}, {"MNQ", ""}, {"F.US.", ""}, {".MNQ", ""}, {"F.US.mnq", ""}, {"F.US.MNQ/other", ""},
+	} {
+		if got := (Contract{Name: "Untrusted display name", SymbolID: test.id}).RootSymbol(); got != test.want {
+			t.Errorf("%q: got %q, want %q", test.id, got, test.want)
+		}
+	}
+}

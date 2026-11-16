@@ -123,6 +123,9 @@ func (e *Engine) snapshotLocked() Status {
 		detail := *e.submissionDetail
 		s.SubmissionDetail = &detail
 	}
+	for n := range s.Intents {
+		s.Intents[n].Policy = s.Intents[n].Policy.Clone()
+	}
 	if len(s.Intents) > 30 {
 		s.Intents = s.Intents[:30]
 	}
@@ -219,6 +222,16 @@ func (e *Engine) Arm(ctx context.Context, c Config, p risk.Profile, a Authorizat
 	if !p.PerTradeOnly && (!a.FloorConfirmed || !finite(a.Floor) || a.Floor <= 0) {
 		return errors.New("legacy policy requires a verified fixed account loss floor; save the Trade Manager to switch to per-trade-only")
 	}
+	// First validate the supplied authorization; narrowing must never turn an
+	// invalid/unverified input into a valid authorization.
+	if err := a.Window.Validate(e.now()); err != nil {
+		return err
+	}
+	restricted, err := p.TradingSchedule().Restrict(a.Window)
+	if err != nil {
+		return err
+	}
+	a.Window = restricted
 	if err := a.Window.Validate(e.now()); err != nil {
 		return err
 	}
@@ -270,7 +283,7 @@ func (e *Engine) Arm(ctx context.Context, c Config, p risk.Profile, a Authorizat
 		a.Floor = 0
 		a.FloorConfirmed = false
 	}
-	e.config, e.policy, e.auth = c, p, a
+	e.config, e.policy, e.auth = c, p.Clone(), a
 	e.paused = false
 	e.armedUntil = e.now().Add(time.Hour)
 	if e.armedUntil.After(a.Window.LastEntry) {
@@ -554,7 +567,7 @@ func (e *Engine) place(ctx context.Context, p *Preview, c projectx.Contract, pla
 		source = "tradingview"
 		profile = e.config.AutomationProfileID
 	}
-	i := Intent{Source: source, ProfileID: profile, OrderType: p.OrderType, ID: p.Signal.ID, AccountID: e.config.AccountID, Session: e.auth.Window.ID(), State: "submitting", Tag: "pxbot-" + randomID(), Signal: p.Signal, Contract: c, Plan: plan, Policy: e.policy, Config: e.config, Window: e.auth.Window, Floor: e.auth.Floor, Created: e.now().UTC(), Updated: e.now().UTC()}
+	i := Intent{Source: source, ProfileID: profile, OrderType: p.OrderType, ID: p.Signal.ID, AccountID: e.config.AccountID, Session: e.auth.Window.ID(), State: "submitting", Tag: "pxbot-" + randomID(), Signal: p.Signal, Contract: c, Plan: plan, Policy: e.policy.Clone(), Config: e.config, Window: e.auth.Window, Floor: e.auth.Floor, Created: e.now().UTC(), Updated: e.now().UTC()}
 	if t := timing(ctx); t != nil {
 		i.Timing = *t
 	}

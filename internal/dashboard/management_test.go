@@ -165,3 +165,35 @@ func TestTradePoliciesAndDerivedWebhookURLsOverHTTP(t *testing.T) {
 		t.Fatal("referenced manager deleted", w.Code)
 	}
 }
+
+func TestTradeManagerScheduleFormAndValidation(t *testing.T) {
+	m, password, h := managementFixture(t)
+	page := requestAs(h, "local", password, "GET", "/trade-managers/new", nil)
+	for _, value := range []string{`name="session_start" value="17:00"`, `name="session_last_entry" value="15:00"`, `name="session_flatten" value="15:05"`} {
+		if !strings.Contains(page.Body.String(), value) {
+			t.Fatal("default manager schedule missing", value)
+		}
+	}
+	values := url.Values{"csrf": {formCSRF(t, page)}, "id": {"timed"}, "name": {"Timed"}, "routing": {"single"}, "account_ids": {"7"}, "max_risk_per_trade": {"150"}, "session_start": {"08:30"}, "session_last_entry": {"13:00"}, "session_flatten": {"13:05"}}
+	response := requestAs(h, "local", password, "POST", "/trade-manager", values)
+	if response.Code != 303 {
+		t.Fatal("schedule form failed", response.Code, response.Body.String())
+	}
+	p := m.Policies().TradeManagers[0]
+	if p.TradingSchedule().Start != "08:30" || p.TradingSchedule().Flatten != "13:05" {
+		t.Fatal("submitted schedule lost")
+	}
+	values.Set("session_flatten", "15:30")
+	response = requestAs(h, "local", password, "POST", "/trade-manager", values)
+	if response.Code != 400 || m.Policies().TradeManagers[0].TradingSchedule().Flatten != "13:05" {
+		t.Fatal("invalid schedule overwrote policy")
+	}
+	values.Set("session_flatten", "13:05")
+	values.Del("session_last_entry")
+	if response = requestAs(h, "local", password, "POST", "/trade-manager", values); response.Code != 400 {
+		t.Fatal("partial schedule accepted")
+	}
+	if m.RuntimeStatus().Armed || m.RuntimeStatus().RunRequested {
+		t.Fatal("saving schedule armed trading")
+	}
+}

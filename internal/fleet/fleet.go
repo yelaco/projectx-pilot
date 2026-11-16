@@ -17,7 +17,6 @@ import (
 
 	"github.com/yelaco/projectx-pilot/internal/execution"
 	"github.com/yelaco/projectx-pilot/internal/risk"
-	"github.com/yelaco/projectx-pilot/internal/session"
 	"github.com/yelaco/projectx-pilot/internal/signal"
 	"github.com/yelaco/projectx-pilot/internal/storage"
 )
@@ -239,6 +238,8 @@ func (f *Fleet) Snapshot() ([]View, bool) {
 	return out, f.paused
 }
 func (f *Fleet) Start(ctx context.Context, p Plan, manualBusy func(int64) bool) error {
+	p.Policy = p.Policy.Clone()
+	p.Instruments = append([]string(nil), p.Instruments...)
 	if !p.Config.Enabled || p.ProfileID == "" || p.ContractID == "" || p.ConfirmedAt.IsZero() {
 		return errors.New("save this profile's trading setup first")
 	}
@@ -516,7 +517,7 @@ func (f *Fleet) arm(r *runner) {
 	}
 	r.retry = f.now().Add(15 * time.Second)
 	f.mu.Unlock()
-	w, open, err := session.ContinuousWindow(f.now(), p.Instruments)
+	w, open, err := p.Policy.TradingSchedule().Window(f.now())
 	if err != nil {
 		r.engine.SetRunMessage("Running · waiting: " + err.Error())
 		return

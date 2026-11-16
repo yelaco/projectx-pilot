@@ -1,6 +1,6 @@
 # Automatic execution and account runners
 
-Use **Automations → profile → Automatic execution**. Each profile has its own saved trading setup and Start/Pause control. Profiles on distinct accounts run together; one profile can fan out to every account in its Trade Manager. No additional daemon, queue service or polling configuration is required.
+Use **Automations → profile → Automatic execution**. Each profile has its own instrument scope, saved trading setup and Start/Pause control. Instruments are configured on the profile; Connection settings no longer require a second global allowlist. Profiles on distinct accounts run together; one profile can fan out to every account in its Trade Manager. No additional daemon, queue service or polling configuration is required.
 
 ## Configure once, then Start
 
@@ -26,7 +26,14 @@ Start stays requested while this process runs, waiting through known closures an
 
 **Restart remains paused.** Saved setup is configuration, not execution authorization. Recover/reconcile, then Start the desired profiles again. A persistent global pause remains active after restart. Never delete a ledger to bypass a lock.
 
-The reviewed calendar revision is `topstep-2026-reviewed-2026-11-13`, based on official [trading hours](https://help.topstep.com/en/articles/8284206-when-and-what-products-can-i-trade) and [2026 holidays](https://help.topstep.com/en/articles/13350348-topstep-holiday-trading-hours). Continuous automation supports MNQ/MGC only in that reviewed year. Normal entries end at 15:00 Chicago, flatten by 15:05; early closes get an additional margin. DST uses America/Chicago independently of desktop timezone. Unknown periods/instruments and merged holiday sessions do not authorize trading. General and per-manager operation dates and the configured Forex Factory US FOMC filter are applied per account. Missing feed coverage alone does not block a day.
+Trading hours belong to the Trade Manager, not an instrument-name list. Each manager has one recurring weekday window in America/Chicago: start, last entry, and flatten. Defaults preserve the previous 17:00 → 15:00 last entry → 15:05 flatten. A start at/after 17:00 means the previous evening; earlier starts mean the trading date itself. Last entry must be at least two minutes before flatten, and flatten must be no later than 15:08 Chicago. DST is applied using local clock times.
+
+Use a narrower window for products with earlier closes or pauses. For example, a CBOT agricultural daytime manager can use 08:30 → 13:10 last entry → 13:15 flatten; an overnight manager can use 19:00 → 07:35 → 07:40. These are conservative configuration examples based on [Topstep's published product hours](https://help.topstep.com/en/articles/8284206-when-and-what-products-can-i-trade), not automatic product-hours discovery. One manager has one window; do not configure a window spanning a product's daily pause. Confirm applicability to every selected contract when saving the profile's trading setup. ProjectX contract metadata provides prices/ticks, not verified trading hours.
+
+Reviewed [2026 holiday cutoffs](https://help.topstep.com/en/articles/13350348-topstep-holiday-trading-hours), revision `topstep-2026-reviewed-2026-11-13`, can only shorten the manager's window. The application flattens five minutes before the published position-close cutoff and ends new entries at least five minutes before that holiday bound. A holiday with no overlap is skipped; weekends and known closed days are skipped. Unknown calendar years remain blocked pending a reviewed update. Account session accounting remains 17:00 Chicago. General/per-manager operation dates and the configured Forex Factory filter also apply; missing news feed coverage alone does not block a day.
+
+Existing managers with no saved schedule inherit the unchanged default without altering their setup scope. Editing a manager's schedule pauses its profiles and invalidates their saved setup scope; confirm the new schedule in each affected profile's Trading setup before Start. Other managers are unaffected. Existing executions retain their captured policy and closing window; schedule edits never widen or replace their protection/management deadlines. Manual Practice authorizations are intersected with the manager's schedule too, without widening the locally verified session. Active monitoring schedules a wake at future entry/flatten/expiry deadlines rather than waiting beyond them for the adaptive backstop.
+
 
 ## Delivery, sizing and protection
 

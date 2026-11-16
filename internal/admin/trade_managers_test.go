@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"github.com/yelaco/projectx-pilot/internal/app"
 	"github.com/yelaco/projectx-pilot/internal/risk"
+	"github.com/yelaco/projectx-pilot/internal/session"
 	"github.com/yelaco/projectx-pilot/internal/signal"
 	"testing"
 	"time"
@@ -67,5 +68,47 @@ func TestTradeManagerAssignmentAndMultiAccountContainment(t *testing.T) {
 	copy.TradeManagers[0].AccountIDs[0] = 999
 	if m.Policies().TradeManagers[0].AccountIDs[0] != 42 {
 		t.Fatal("policy aliases saved state")
+	}
+}
+
+func TestManagerSchedulePersistenceAndLegacyEdit(t *testing.T) {
+	m, _, path, state := setup(t)
+	p := risk.Defaults()
+	p.ID = "scheduled"
+	p.Name = "Scheduled"
+	p.AccountIDs = []int64{42}
+	p.PerTradeOnly = true
+	p.Schedule = &session.Schedule{Start: "08:30", LastEntry: "13:00", Flatten: "13:05"}
+	if err := m.SaveTradeManager(p); err != nil {
+		t.Fatal(err)
+	}
+	p.Schedule.Start = "10:00"
+	got := m.Policies().TradeManagers[0]
+	if got.TradingSchedule().Start != "08:30" {
+		t.Fatal("input aliases stored schedule")
+	}
+	got.Schedule.Start = "11:00"
+	if m.Policies().TradeManagers[0].TradingSchedule().Start != "08:30" {
+		t.Fatal("snapshot aliases stored schedule")
+	}
+	oldClient := m.Policies().TradeManagers[0]
+	oldClient.Schedule = nil
+	oldClient.Name = "Renamed"
+	if err := m.SaveTradeManager(oldClient); err != nil {
+		t.Fatal(err)
+	}
+	if m.Policies().TradeManagers[0].TradingSchedule().Start != "08:30" {
+		t.Fatal("old form erased custom schedule")
+	}
+	next, _, err := Open(m.Settings().Config, path, state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer next.Close()
+	if next.Policies().TradeManagers[0].TradingSchedule().Flatten != "13:05" {
+		t.Fatal("schedule lost after restart")
+	}
+	if next.RuntimeStatus().Armed {
+		t.Fatal("schedule loading armed execution")
 	}
 }

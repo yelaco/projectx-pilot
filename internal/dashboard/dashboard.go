@@ -43,6 +43,7 @@ var stylesheet string
 var page = template.Must(template.New("admin").ParseFS(templateFiles, "admin.html", "pages/*.html"))
 
 type view struct {
+	ManagerSchedule                                                          session.Schedule
 	UserData                                                                 realtime.UserStatus
 	ProfileTargets                                                           []int64
 	ProfileTargetNames                                                       string
@@ -156,7 +157,7 @@ func handler(s *app.Service, token string, m *admin.Manager) http.Handler {
 			if notice == "" && r.Method == http.MethodGet {
 				notice = noticeText(r.URL.Query().Get("notice"))
 			}
-			v := view{Current: current.Info, Page: name, Nav: nav, Title: title, Subtitle: subtitle, State: s.Snapshot(), Editable: m != nil, CSRF: csrf, Notice: notice, Error: message}
+			v := view{ManagerSchedule: session.DefaultSchedule(), Current: current.Info, Page: name, Nav: nav, Title: title, Subtitle: subtitle, State: s.Snapshot(), Editable: m != nil, CSRF: csrf, Notice: notice, Error: message}
 			if m != nil {
 				v.Settings = m.Settings()
 				v.NewsStatus = m.NewsStatus()
@@ -190,14 +191,8 @@ func handler(s *app.Service, token string, m *admin.Manager) http.Handler {
 					}
 				}
 				for _, contract := range v.State.Contracts {
-					if !contract.ActiveContract {
-						continue
-					}
-					for _, allowed := range v.Settings.Config.AllowedInstruments {
-						if strings.HasSuffix(contract.SymbolID, "."+allowed) {
-							v.ManualTicketContracts = append(v.ManualTicketContracts, contract)
-							break
-						}
+					if contract.ID != "" && contract.ActiveContract && contract.RootSymbol() != "" {
+						v.ManualTicketContracts = append(v.ManualTicketContracts, contract)
 					}
 				}
 
@@ -319,6 +314,7 @@ func handler(s *app.Service, token string, m *admin.Manager) http.Handler {
 				for _, tm := range v.Policies.TradeManagers {
 					if tm.ID == v.Profile.TradeManagerID {
 						v.ProfileTargets = tm.AccountIDs
+						v.ManagerSchedule = tm.TradingSchedule()
 					}
 				}
 				parts := []string{}
@@ -711,8 +707,7 @@ func handler(s *app.Service, token string, m *admin.Manager) http.Handler {
 				render(w, 400, "", "Invalid refresh interval")
 				return
 			}
-			instruments := strings.FieldsFunc(strings.ToUpper(r.PostForm.Get("instruments")), func(r rune) bool { return r == ',' || r == ' ' || r == '\n' || r == '\t' })
-			err = m.Save(admin.Update{NewsFilter: r.PostForm.Get("news_filter"), AccountID: account, Instruments: instruments, RefreshSeconds: seconds, Username: r.PostForm.Get("username"), APIKey: r.PostForm.Get("api_key"), ClearCredentials: r.PostForm.Get("clear_credentials") == "yes"})
+			err = m.Save(admin.Update{NewsFilter: r.PostForm.Get("news_filter"), AccountID: account, RefreshSeconds: seconds, Username: r.PostForm.Get("username"), APIKey: r.PostForm.Get("api_key"), ClearCredentials: r.PostForm.Get("clear_credentials") == "yes"})
 			if err != nil {
 				render(w, 400, "", err.Error())
 				return

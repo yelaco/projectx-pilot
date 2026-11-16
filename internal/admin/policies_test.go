@@ -46,8 +46,12 @@ func TestAccountPermissionsAndProfiles(t *testing.T) {
 	}
 	a.Source = "local-manual"
 	a.Instruments = []string{"NQ"}
+	if err := m.SaveAutomation(a); err != nil {
+		t.Fatal("profile is still restricted by a global instrument list", err)
+	}
+	a.Instruments = []string{"nq!"}
 	if m.SaveAutomation(a) == nil {
-		t.Fatal("instrument allowlist bypass")
+		t.Fatal("invalid profile instrument accepted")
 	}
 	a.Instruments = []string{"MNQ"}
 	a.Name = "Updated"

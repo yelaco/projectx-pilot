@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/yelaco/projectx-pilot/internal/risk"
+	"github.com/yelaco/projectx-pilot/internal/session"
 )
 
 func parseTradeManager(r *http.Request) (risk.Profile, error) {
@@ -29,6 +30,9 @@ func parseTradeManager(r *http.Request) (risk.Profile, error) {
 	p.MaxRiskPerTrade, err = strconv.ParseFloat(r.PostForm.Get("max_risk_per_trade"), 64)
 	if err != nil {
 		return p, errors.New("maximum risk per trade must be numeric")
+	}
+	if r.PostForm.Has("session_start") || r.PostForm.Has("session_last_entry") || r.PostForm.Has("session_flatten") {
+		p.Schedule = &session.Schedule{Start: r.PostForm.Get("session_start"), LastEntry: r.PostForm.Get("session_last_entry"), Flatten: r.PostForm.Get("session_flatten")}
 	}
 	return p, p.Validate()
 }

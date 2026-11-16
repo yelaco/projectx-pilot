@@ -39,7 +39,7 @@ The application starts **read-only and disarmed**. Receiving an alert alone does
 
 Automatic execution supports eligible simulated Practice, Trading Combine, and Express Funded accounts. Manual API test tickets are Practice-only; Live Funded accounts are unsupported.
 
-One running profile owns each account, with up to 20 targets per Trade Manager. Risk applies independently per account; fanout can partially succeed. Per-trade-only policies do not enforce Topstep MLL or an aggregate portfolio cap. Continuous session coverage is currently limited to reviewed **2026 MNQ/MGC** calendars. Restarts leave automation paused.
+One running profile owns each account, with up to 20 targets per Trade Manager. Risk applies independently per account; fanout can partially succeed. Per-trade-only policies do not enforce Topstep MLL or an aggregate portfolio cap. Trade Managers define trading windows; reviewed **2026 holiday cutoffs** can shorten them. Confirm that the selected window fits your products’ hours and pauses. Restarts leave automation paused.
 
 ## Documentation
 

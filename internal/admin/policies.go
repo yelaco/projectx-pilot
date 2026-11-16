@@ -3,10 +3,10 @@ package admin
 import (
 	"encoding/json"
 	"errors"
-	"os"
-	"path/filepath"
 	"github.com/yelaco/projectx-pilot/internal/config"
 	"github.com/yelaco/projectx-pilot/internal/risk"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -164,7 +164,7 @@ func (m *Manager) Policies() Policies {
 func clonePolicies(p Policies) Policies {
 	out := Policies{TradeManagers: append([]risk.Profile(nil), p.TradeManagers...), CredentialOwner: p.CredentialOwner, Accounts: append([]AccountPolicy(nil), p.Accounts...), Automations: append([]Automation(nil), p.Automations...)}
 	for i := range out.TradeManagers {
-		out.TradeManagers[i].AccountIDs = append([]int64(nil), out.TradeManagers[i].AccountIDs...)
+		out.TradeManagers[i] = out.TradeManagers[i].Clone()
 	}
 	for i := range out.Automations {
 		out.Automations[i].Instruments = append([]string(nil), out.Automations[i].Instruments...)
@@ -246,15 +246,6 @@ func (m *Manager) SaveAutomation(a Automation) error {
 		}
 		if !found {
 			return errors.New("select an existing trade manager")
-		}
-	}
-	allowed := map[string]bool{}
-	for _, s := range m.c.AllowedInstruments {
-		allowed[s] = true
-	}
-	for _, s := range a.Instruments {
-		if !allowed[s] {
-			return errors.New("automation instrument is outside configured instrument allowlist")
 		}
 	}
 	// Profiles can be drafted before discovery; account grants are separately verified.

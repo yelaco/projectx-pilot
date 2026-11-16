@@ -835,3 +835,83 @@ func TestOneWayOCOFillDoesNotTriggerEmergencyClose(t *testing.T) {
 		t.Fatal("original trigger lost from durable record")
 	}
 }
+
+func TestManagerScheduleCapsAuthorizationAndKeepsFrozenWindow(t *testing.T) {
+	e, api, q, _, c, p, a, s, clock := fixture(t)
+	p.Schedule = &session.Schedule{Start: "09:30", LastEntry: "13:00", Flatten: "13:05"}
+	if err := e.Arm(context.Background(), c, p, a); err == nil || e.Status().Armed {
+		t.Fatal("manager opening time bypassed")
+	}
+	*clock = clock.Add(31 * time.Minute)
+	s.Timestamp = *clock
+	q.q.At = *clock
+	if err := e.Arm(context.Background(), c, p, a); err != nil {
+		t.Fatal(err)
+	}
+	if e.auth.Window.LastEntry.Format("15:04") != "13:00" || e.auth.Window.Flatten.Format("15:04") != "13:05" {
+		t.Fatal("manager cutoff bypassed", e.auth.Window)
+	}
+	preview, err := e.PrepareOrder(context.Background(), s, "mnq", 1, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = e.Submit(context.Background(), preview.Token); err != nil {
+		t.Fatal(err)
+	}
+	request := api.requests[0]
+	parent := projectx.Order{ID: 77, AccountID: 42, ContractID: request.ContractID, Type: request.Type, Side: request.Side, Size: request.Size, Status: 1, CustomTag: request.CustomTag}
+	api.history = []projectx.Order{parent}
+	api.orders = []projectx.Order{parent}
+	// Caller edits must not change already-authorized policy or managed cutoffs.
+	p.Schedule.Flatten = "15:05"
+	status := e.Status()
+	if status.Intents[0].Policy.TradingSchedule().Flatten != "13:05" || status.Intents[0].Window.Flatten.Format("15:04") != "13:05" {
+		t.Fatal("intent schedule was not frozen")
+	}
+	status.Intents[0].Policy.Schedule.Flatten = "15:05"
+	if e.Status().Intents[0].Policy.TradingSchedule().Flatten != "13:05" {
+		t.Fatal("snapshot aliases managed schedule")
+	}
+	*clock = time.Date(2026, 11, 13, 13, 5, 0, 0, session.Chicago)
+	q.q.At = *clock
+	if err = e.reconcile(context.Background(), &e.intents[0]); err != nil {
+		t.Fatal(err)
+	}
+	if !e.intents[0].EmergencyAttempted || e.intents[0].HaltKind != "session_close" {
+		t.Fatal("manager flatten cutoff not enforced")
+	}
+	if len(api.requests) != 1 {
+		t.Fatal("schedule change replayed placement")
+	}
+}
+
+func TestDefaultManagerScheduleAlsoCapsManualAuthorization(t *testing.T) {
+	e, _, _, _, c, p, a, _, _ := fixture(t)
+	a.Window.Flatten = time.Date(2026, 11, 13, 15, 8, 0, 0, session.Chicago)
+	a.Window.LastEntry = a.Window.Flatten.Add(-2 * time.Minute)
+	if err := e.Arm(context.Background(), c, p, a); err != nil {
+		t.Fatal(err)
+	}
+	if e.auth.Window.Flatten.Format("15:04") != "15:05" || e.auth.Window.LastEntry.Format("15:04") != "15:00" {
+		t.Fatal("default manager schedule bypassed by manual authorization", e.auth.Window)
+	}
+}
+
+func TestManagerCutoffsWakeBeforeAdaptiveReconciliationBackstop(t *testing.T) {
+	e, _, _, _, _, _, _, s, clock := fixture(t)
+	e.monitorInterval = func() time.Duration { return time.Minute }
+	e.intents = []Intent{{State: "accepted", OrderType: 1, Signal: s, Window: session.Window{LastEntry: clock.Add(2 * time.Second), Flatten: clock.Add(7 * time.Second)}}}
+	if delay := e.monitorDelayLocked(); delay != 2*time.Second {
+		t.Fatal("last-entry deadline hidden by backstop", delay)
+	}
+	*clock = clock.Add(3 * time.Second)
+	if delay := e.monitorDelayLocked(); delay != 4*time.Second {
+		t.Fatal("flatten deadline hidden by backstop", delay)
+	}
+	e.intents[0].Window.LastEntry = clock.Add(time.Hour)
+	e.intents[0].Window.Flatten = clock.Add(2 * time.Hour)
+	e.intents[0].Signal.Timestamp = clock.Add(-30*time.Minute + time.Second)
+	if delay := e.monitorDelayLocked(); delay != time.Second {
+		t.Fatal("limit expiry hidden by backstop", delay)
+	}
+}

@@ -163,6 +163,22 @@ func TestUnixWakeToMultiAccountAcceptance(t *testing.T) {
 	if api.count() != 2 {
 		t.Fatal("did not execute complete target set")
 	}
+	// New profile scope is independent of old Connection settings, even while
+	// existing account intents need monitoring. Saving it must not pause the
+	// unrelated running profile or require a connection-settings change.
+	m.mu.Lock()
+	m.c.AllowedInstruments = []string{"MNQ"}
+	m.mu.Unlock()
+	draft := Automation{ID: "gold", Name: "Gold", Strategy: "gold", AccountID: 43, Instruments: []string{"MGC"}, Source: "tradingview-manual"}
+	if err := m.SaveAutomation(draft); err != nil {
+		t.Fatal("profile edit blocked by monitored account/global instrument list", err)
+	}
+	views, _ := m.RunnerSnapshot()
+	for _, view := range views {
+		if view.ProfileID != "swift" || !view.Status.RunRequested || len(view.Status.Intents) == 0 {
+			t.Fatal("unrelated account monitoring was interrupted", view.AccountID)
+		}
+	}
 	results, err := m.AutomationResults()
 	if err != nil || len(results) != 1 || results[0].State != "submitted" {
 		t.Fatal("aggregate result incorrect", results, err)
@@ -228,5 +244,17 @@ func TestIndependentProfileSetupPersistsWithoutOverwriting(t *testing.T) {
 	}
 	if next.RuntimeStatus().Armed || next.RuntimeStatus().RunRequested {
 		t.Fatal("configuration restored arming")
+	}
+	// Changing one manager's schedule invalidates only its profile's setup.
+	changed := next.Policies().TradeManagers[0]
+	changed.Schedule = &session.Schedule{Start: "08:30", LastEntry: "13:00", Flatten: "13:05"}
+	if err := next.SaveTradeManager(changed); err != nil {
+		t.Fatal(err)
+	}
+	if ready, why := next.FleetReadiness("swift"); ready || !strings.Contains(why, "scope changed") {
+		t.Fatal("schedule edit did not require scoped confirmation", ready, why)
+	}
+	if ready, why := next.FleetReadiness("second"); !ready {
+		t.Fatal("unrelated manager setup invalidated", why)
 	}
 }

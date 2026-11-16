@@ -119,7 +119,7 @@ Normal-hours preset fills Chicago session times from a date picker. Custom early
 
 Automatic execution now shows a compact Start/Pause control with status and outcomes. Signal routing, Trading setup and Emergency controls are collapsed. Trading setup combines account eligibility, cost/quantity settings and one Practice/calendar confirmation; it is saved once with password confirmation. Start uses the already authenticated local login and CSRF protection, with no daily form.
 
-A running choice waits through closures/daily risk lockouts and can obtain fresh permission for the next verified session automatically. Reviewed calendar coverage is currently 2026 MNQ/MGC with ordinary Chicago accounting. Unknown data/hours never authorize a trade. Explicit Pause/configuration changes and critical execution faults stop the runner. A restart still starts paused; use the single Start button after recovery. This replaces the former daily session-start workflow. [Current instructions](automatic-execution.md).
+A running choice waits through closures/daily risk lockouts and can obtain fresh permission for the next verified session automatically. Trade Manager schedules define start/last-entry/flatten in Chicago time, capped by reviewed 2026 holiday cutoffs with ordinary Chicago accounting. Unknown data/hours never authorize a trade. Explicit Pause/configuration changes and critical execution faults stop the runner. A restart still starts paused; use the single Start button after recovery. This replaces the former daily session-start workflow. [Current instructions](automatic-execution.md).
 
 ## Simplified Trade Managers
 
@@ -137,7 +137,7 @@ Practice execution resolves the saved Trade Manager before rendering session aut
 
 New dashboard automation profiles have a fixed webhook signal source. Local-manual and future local-strategy source choices have been removed. Legacy non-webhook profiles can still be viewed/deleted; saving them explicitly converts them to webhook profiles, generates routing credentials and pauses entries. The local review page displays received webhook signals and stored history, with no manual JSON import form.
 
-Practice execution requires no automation profile or webhook delivery. It is a local API order test on the saved Practice account/single-account Trade Manager and globally allowed active contract. Preview calculates risk without transmission; the separate password-confirmed approval sends a real Practice order. Read-only account/connection monitoring already checks API access without placing an order. Automated webhook trading is controlled separately by the profile’s Start/Pause controls.
+Practice execution requires no automation profile or webhook delivery. It is a local API order test on the saved Practice account/single-account Trade Manager and discovered active contract. Preview calculates risk without transmission; the separate password-confirmed approval sends a real Practice order. Read-only account/connection monitoring already checks API access without placing an order. Automated webhook trading is controlled separately by the profile’s Start/Pause controls.
 
 Practice execution now labels persistent application locks as **Bot local safety lock**, separately from the provider account's trading permission. The narrowly scoped **Review local lock from the old OCO checker** panel appears only for the matching legacy lock and closed current-session executions. It requires password confirmation, historical proof and two fresh flat-account observations, records an audit repair, and leaves trading paused. See [recovery procedures](recovery-procedures.md#reviewing-the-known-one-way-oco-false-alarm). It cannot clear daily loss locks or unresolved order uncertainty.
 
@@ -169,3 +169,15 @@ access does not establish provider approval for an order-trigger workflow.
 ## Standalone operator guide
 
 Open `/guide` on the local bot service, or use the **ⓘ Guide** button in the dashboard header to open it in a new tab. It has its own layout, quick start, detailed setup/operation sections, status explanations, and troubleshooting. It requires no login and contains no account data, credentials, profile state, or trading controls. Administrator pages and APIs still require authentication. The guide remains on the local dashboard port and must not be publicly tunneled.
+
+## Instrument scope
+
+Set instruments on each automation profile. There is no separate global list in Connection settings. Profile, strategy, pinned contract, authoritative metadata, risk and session checks still determine which alerts can execute. Creating or editing an unrelated profile does not require changing connection settings or stopping monitoring on another automatic account. Editing the running profile itself pauses its entries; existing trades retain their captured policy and continue monitoring.
+
+Practice tickets list discovered active contracts with valid provider symbol metadata and still require PRAC eligibility, arming, exact-quantity risk checks, preview approval and protection. The retired YAML `allowed_instruments` field is accepted for compatibility, ignored at runtime and omitted when configuration is next saved. Connection/credential changes remain protected while accounts need monitoring. No symbol-name calendar gate remains. The selected manager window must fit the contract’s official hours; automatic holiday coverage remains limited to reviewed years.
+
+## Trade Manager schedules
+
+Each Trade Manager editor has start, last-entry and flatten time inputs in America/Chicago. Defaults are 17:00, 15:00 and 15:05. Starts at/after 17:00 refer to the preceding evening; earlier starts refer to the trading date. One window applies per weekday. Use appropriate earlier windows for products with earlier closes or pauses. Last entry must precede flatten by at least two minutes and flatten must be by 15:08 Chicago. Known holiday cutoffs only narrow these times. Unknown holiday years cannot authorize automatic trading.
+
+Changing a manager pauses its assigned profiles and requires saving their updated trading-setup confirmation before restarting. Unrelated managers continue independently. Existing trades retain their captured window; editing a schedule does not change the management deadline of an already placed order. Legacy managers without schedule fields keep the original default. Old clients omitting schedule fields cannot erase a previously saved custom schedule.

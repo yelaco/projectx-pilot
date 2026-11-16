@@ -4,23 +4,25 @@ package risk
 
 import (
 	"errors"
+	"github.com/yelaco/projectx-pilot/internal/session"
 	"math"
 	"strings"
 )
 
 type Profile struct {
-	PerTradeOnly           bool    `json:"per_trade_only,omitempty"`
-	ID                     string  `json:"id"`
-	Name                   string  `json:"name"`
-	Routing                string  `json:"routing"`
-	AccountIDs             []int64 `json:"account_ids"`
-	MaxRiskPerTrade        float64 `json:"max_risk_per_trade"`
-	MaxDailyLoss           float64 `json:"max_daily_loss"`
-	MaxTradesPerSession    int     `json:"max_trades_per_session"`
-	MaxConcurrentPositions int     `json:"max_concurrent_positions"`
-	MaxOpenRisk            float64 `json:"max_open_risk"`
-	MaxSignalRisk          float64 `json:"max_signal_risk"`
-	TargetProfit           float64 `json:"target_profit"`
+	Schedule               *session.Schedule `json:"schedule,omitempty"`
+	PerTradeOnly           bool              `json:"per_trade_only,omitempty"`
+	ID                     string            `json:"id"`
+	Name                   string            `json:"name"`
+	Routing                string            `json:"routing"`
+	AccountIDs             []int64           `json:"account_ids"`
+	MaxRiskPerTrade        float64           `json:"max_risk_per_trade"`
+	MaxDailyLoss           float64           `json:"max_daily_loss"`
+	MaxTradesPerSession    int               `json:"max_trades_per_session"`
+	MaxConcurrentPositions int               `json:"max_concurrent_positions"`
+	MaxOpenRisk            float64           `json:"max_open_risk"`
+	MaxSignalRisk          float64           `json:"max_signal_risk"`
+	TargetProfit           float64           `json:"target_profit"`
 }
 
 func Defaults() Profile {
@@ -59,6 +61,9 @@ func (p Profile) Validate() error {
 	if !positive(p.MaxRiskPerTrade) {
 		return errors.New("maximum risk per trade must be a finite positive amount")
 	}
+	if err := p.TradingSchedule().Validate(); err != nil {
+		return err
+	}
 	if p.PerTradeOnly {
 		return nil
 	}
@@ -77,4 +82,21 @@ func (p Profile) Validate() error {
 		return errors.New("profit objective must be a finite nonnegative amount")
 	}
 	return nil
+}
+
+// TradingSchedule preserves the original default for policies saved before
+// explicit schedules existed. Nil stays omitted from JSON to preserve scope hashes.
+func (p Profile) TradingSchedule() session.Schedule {
+	if p.Schedule == nil {
+		return session.DefaultSchedule()
+	}
+	return *p.Schedule
+}
+func (p Profile) Clone() Profile {
+	p.AccountIDs = append([]int64(nil), p.AccountIDs...)
+	if p.Schedule != nil {
+		schedule := *p.Schedule
+		p.Schedule = &schedule
+	}
+	return p
 }

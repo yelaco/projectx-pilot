@@ -87,24 +87,22 @@ func TestNormalPresetAndChicagoPickerOffsets(t *testing.T) {
 
 func TestReviewedContinuousCalendar(t *testing.T) {
 	now := time.Date(2026, 11, 26, 10, 0, 0, 0, Chicago)
-	w, open, err := ContinuousWindow(now, []string{"MNQ"})
+	w, open, err := DefaultSchedule().Window(now)
 	if err != nil || !open || w.Flatten.In(Chicago).Format("15:04") != "11:40" || w.LastEntry.In(Chicago).Format("15:04") != "11:35" {
 		t.Fatal("Thanksgiving cutoff incorrect", w, open, err)
 	}
 	now = time.Date(2026, 12, 25, 10, 0, 0, 0, Chicago)
-	w, open, err = ContinuousWindow(now, []string{"MGC"})
+	w, open, err = DefaultSchedule().Window(now)
 	if err != nil || open || w.ID() != "2026-12-28" {
 		t.Fatal("closed holiday/weekend mishandled", w, open, err)
 	}
-	if _, _, err = ContinuousWindow(now, []string{"ZC"}); err == nil {
-		t.Fatal("unknown instrument schedule inferred")
-	}
-	if _, _, err = ContinuousWindow(time.Date(2027, 1, 4, 9, 0, 0, 0, Chicago), []string{"MNQ"}); err == nil {
+
+	if _, _, err = DefaultSchedule().Window(time.Date(2027, 1, 4, 9, 0, 0, 0, Chicago)); err == nil {
 		t.Fatal("unknown calendar year inferred")
 	}
 	for _, day := range []string{"2026-03-09", "2026-11-02"} {
 		d, _ := time.ParseInLocation("2006-01-02", day, Chicago)
-		w, open, err = ContinuousWindow(d.Add(9*time.Hour), []string{"MNQ"})
+		w, open, err = DefaultSchedule().Window(d.Add(9 * time.Hour))
 		if err != nil || !open || w.Start.In(Chicago).Hour() != 17 {
 			t.Fatal("calendar DST incorrect", w, err)
 		}

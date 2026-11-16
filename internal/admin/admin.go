@@ -7,9 +7,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/yelaco/projectx-pilot/internal/tunnel"
 	"os"
 	"path/filepath"
-	"github.com/yelaco/projectx-pilot/internal/tunnel"
 	"strings"
 	"sync"
 	"time"
@@ -39,7 +39,7 @@ type Settings struct {
 type Update struct {
 	NewsFilter       string
 	AccountID        int64
-	Instruments      []string
+	Instruments      []string // Deprecated: instrument scope belongs to automation profiles.
 	RefreshSeconds   int
 	Username, APIKey string
 	ClearCredentials bool
@@ -182,7 +182,6 @@ func (m *Manager) Settings() Settings {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	c := m.c
-	c.AllowedInstruments = append([]string(nil), c.AllowedInstruments...)
 	return Settings{Config: c, Username: m.credentials.Username, HasCredentials: m.credentials.APIKey != "", EnvironmentCredentials: m.environment}
 }
 func (m *Manager) Save(u Update) error {
@@ -216,7 +215,6 @@ func (m *Manager) Save(u Update) error {
 	if u.NewsFilter != "" {
 		next.NewsFilter = u.NewsFilter
 	}
-	next.AllowedInstruments = u.Instruments
 	next.RefreshInterval = time.Duration(u.RefreshSeconds) * time.Second
 	if err := next.Validate(); err != nil {
 		return err

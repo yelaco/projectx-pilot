@@ -1,7 +1,9 @@
 package risk
 
 import (
+	"encoding/json"
 	"math"
+	"strings"
 	"testing"
 )
 
@@ -29,5 +31,24 @@ func TestPolicyValidation(t *testing.T) {
 	multi.AccountIDs = []int64{42, 42}
 	if multi.Validate() == nil {
 		t.Fatal("duplicate accounts accepted")
+	}
+}
+
+func TestLegacyDefaultScheduleKeepsPolicyJSONScope(t *testing.T) {
+	p := Defaults()
+	p.ID = "legacy"
+	p.Name = "Legacy"
+	p.AccountIDs = []int64{42}
+	original, err := json.Marshal(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(original), `"schedule"`) {
+		t.Fatal("implicit schedule changed legacy scope JSON")
+	}
+	_ = p.TradingSchedule()
+	after, err := json.Marshal(p.Clone())
+	if err != nil || string(after) != string(original) {
+		t.Fatal("default schedule changed saved identity", err)
 	}
 }

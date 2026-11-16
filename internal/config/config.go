@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"time"
 
-	"gopkg.in/yaml.v3"
 	"github.com/yelaco/projectx-pilot/internal/session"
+	"gopkg.in/yaml.v3"
 )
 
 type Config struct {
@@ -20,17 +20,18 @@ type Config struct {
 	SignalMaxAge             time.Duration       `yaml:"signal_max_age"`
 	Mode                     string              `yaml:"mode"`
 	AccountID                int64               `yaml:"account_id"`
-	AllowedInstruments       []string            `yaml:"allowed_instruments"`
-	RequestTimeout           time.Duration       `yaml:"request_timeout"`
-	RefreshInterval          time.Duration       `yaml:"refresh_interval"`
-	DashboardListen          string              `yaml:"dashboard_listen"`
-	LogLevel                 string              `yaml:"log_level"`
+	// Deprecated: accepted only when loading older configurations; never enforced.
+	AllowedInstruments []string      `yaml:"allowed_instruments,omitempty" json:"-"`
+	RequestTimeout     time.Duration `yaml:"request_timeout"`
+	RefreshInterval    time.Duration `yaml:"refresh_interval"`
+	DashboardListen    string        `yaml:"dashboard_listen"`
+	LogLevel           string        `yaml:"log_level"`
 }
 
 type Secrets struct{ Username, APIKey, DashboardToken string }
 
 func Load(path string) (Config, error) {
-	c := Config{NewsFilter: "us_fomc", SignalMaxAge: 5 * time.Minute, Mode: "read-only", AllowedInstruments: []string{"MNQ", "MGC"}, RequestTimeout: 10 * time.Second, RefreshInterval: time.Minute, DashboardListen: "127.0.0.1:8080", LogLevel: "info"}
+	c := Config{NewsFilter: "us_fomc", SignalMaxAge: 5 * time.Minute, Mode: "read-only", RequestTimeout: 10 * time.Second, RefreshInterval: time.Minute, DashboardListen: "127.0.0.1:8080", LogLevel: "info"}
 	f, err := os.Open(path)
 	if err != nil {
 		return c, err
@@ -52,6 +53,8 @@ func Load(path string) (Config, error) {
 	if err := d.Decode(&extra); err != io.EOF {
 		return c, errors.New("configuration must contain one YAML document")
 	}
+	// Profiles now define instrument scope. Retire the old global setting.
+	c.AllowedInstruments = nil
 	return c, c.Validate()
 }
 
@@ -111,21 +114,6 @@ func (c Config) Validate() error {
 	case "debug", "info", "warn", "error":
 	default:
 		return errors.New("invalid log_level")
-	}
-	if len(c.AllowedInstruments) == 0 {
-		return errors.New("allowed_instruments is empty")
-	}
-	seen := map[string]bool{}
-	for _, s := range c.AllowedInstruments {
-		if len(s) < 1 || len(s) > 16 || seen[s] {
-			return errors.New("invalid or duplicate instrument")
-		}
-		for _, r := range s {
-			if !(r >= 'A' && r <= 'Z' || r >= '0' && r <= '9') {
-				return errors.New("instruments must be uppercase alphanumeric")
-			}
-		}
-		seen[s] = true
 	}
 	return nil
 }

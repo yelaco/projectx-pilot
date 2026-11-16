@@ -94,8 +94,8 @@ func (m *Manager) ImportSignal(profileID, contractID, payload string) error {
 		}
 		return false
 	}
-	if !contains(profile.Instruments, sig.Symbol) || !contains(m.c.AllowedInstruments, sig.Symbol) {
-		return errors.New("signal instrument is not allowed by this profile and configuration")
+	if !contains(profile.Instruments, sig.Symbol) {
+		return errors.New("signal instrument is not allowed by this profile")
 	}
 	if m.service == nil {
 		return errors.New("contract discovery required before import")

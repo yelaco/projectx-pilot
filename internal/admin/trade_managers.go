@@ -7,11 +7,19 @@ import (
 )
 
 func (m *Manager) SaveTradeManager(profile risk.Profile) error {
+	profile = profile.Clone()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	// Older clients omit schedule fields; they must not erase a custom schedule.
+	for _, old := range m.policies.TradeManagers {
+		if old.ID == profile.ID && profile.Schedule == nil && old.Schedule != nil {
+			schedule := *old.Schedule
+			profile.Schedule = &schedule
+		}
+	}
 	if err := profile.Validate(); err != nil {
 		return err
 	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
 	p := clonePolicies(m.policies)
 	found := false
 	for i := range p.TradeManagers {
