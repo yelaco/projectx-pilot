@@ -4,7 +4,7 @@ import (
 	"io"
 	"log/slog"
 	"path/filepath"
-	"projectxbot/internal/storage"
+	"github.com/yelaco/projectx-pilot/internal/storage"
 	"strings"
 	"testing"
 )

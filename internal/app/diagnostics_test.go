@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"projectxbot/internal/projectx"
+	"github.com/yelaco/projectx-pilot/internal/projectx"
 )
 
 func TestRefreshDiagnostics(t *testing.T) {

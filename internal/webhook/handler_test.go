@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"projectxbot/internal/ingress"
-	"projectxbot/internal/signal"
-	"projectxbot/internal/storage"
+	"github.com/yelaco/projectx-pilot/internal/ingress"
+	"github.com/yelaco/projectx-pilot/internal/signal"
+	"github.com/yelaco/projectx-pilot/internal/storage"
 )
 
 func alert(now time.Time) signal.Signal {

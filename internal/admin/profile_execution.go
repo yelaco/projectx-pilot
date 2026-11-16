@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"projectxbot/internal/execution"
+	"github.com/yelaco/projectx-pilot/internal/execution"
 )
 
 func (m *Manager) executionProfileLocked(id string) (Automation, error) {

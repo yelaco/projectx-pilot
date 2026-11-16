@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"projectxbot/internal/ingress"
+	"github.com/yelaco/projectx-pilot/internal/ingress"
 )
 
 func (m *Manager) syncIngressLocked() error {

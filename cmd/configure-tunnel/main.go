@@ -14,8 +14,8 @@ import (
 	"strings"
 	"syscall"
 
-	"projectxbot/internal/config"
-	"projectxbot/internal/ingress"
+	"github.com/yelaco/projectx-pilot/internal/config"
+	"github.com/yelaco/projectx-pilot/internal/ingress"
 )
 
 var hostnamePattern = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$`)

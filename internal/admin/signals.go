@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"projectxbot/internal/signal"
-	"projectxbot/internal/storage"
+	"github.com/yelaco/projectx-pilot/internal/signal"
+	"github.com/yelaco/projectx-pilot/internal/storage"
 )
 
 func (m *Manager) inboxStore() (*storage.Inbox, error) {

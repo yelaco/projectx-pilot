@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"projectxbot/internal/app"
-	"projectxbot/internal/signal"
-	"projectxbot/internal/storage"
+	"github.com/yelaco/projectx-pilot/internal/app"
+	"github.com/yelaco/projectx-pilot/internal/signal"
+	"github.com/yelaco/projectx-pilot/internal/storage"
 )
 
 func TestDeliveryNeedsLocalImportAndRemainsNonExecuting(t *testing.T) {

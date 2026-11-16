@@ -9,9 +9,9 @@ import (
 	"strconv"
 	"time"
 
-	"projectxbot/internal/execution"
-	"projectxbot/internal/signal"
-	"projectxbot/internal/storage"
+	"github.com/yelaco/projectx-pilot/internal/execution"
+	"github.com/yelaco/projectx-pilot/internal/signal"
+	"github.com/yelaco/projectx-pilot/internal/storage"
 )
 
 type Engine interface {

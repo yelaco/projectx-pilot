@@ -5,8 +5,8 @@ import (
 	"math"
 	"time"
 
-	"projectxbot/internal/projectx"
-	"projectxbot/internal/signal"
+	"github.com/yelaco/projectx-pilot/internal/projectx"
+	"github.com/yelaco/projectx-pilot/internal/signal"
 )
 
 // SizingInputs must come from a reconciled, session-scoped account observation.

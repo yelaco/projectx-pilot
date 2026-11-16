@@ -14,8 +14,8 @@ import (
 	"sync"
 	"time"
 
-	"projectxbot/internal/config"
-	"projectxbot/internal/session"
+	"github.com/yelaco/projectx-pilot/internal/config"
+	"github.com/yelaco/projectx-pilot/internal/session"
 )
 
 const URL = "https://nfs.faireconomy.media/ff_calendar_thisweek.json"

@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"projectxbot/internal/projectx"
+	"github.com/yelaco/projectx-pilot/internal/projectx"
 )
 
 type Reader interface {

@@ -3,7 +3,7 @@ package admin
 import (
 	"errors"
 
-	"projectxbot/internal/risk"
+	"github.com/yelaco/projectx-pilot/internal/risk"
 )
 
 func (m *Manager) SaveTradeManager(profile risk.Profile) error {

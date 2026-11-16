@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"strconv"
 
-	"projectxbot/internal/admin"
-	"projectxbot/internal/execution"
-	"projectxbot/internal/session"
+	"github.com/yelaco/projectx-pilot/internal/admin"
+	"github.com/yelaco/projectx-pilot/internal/execution"
+	"github.com/yelaco/projectx-pilot/internal/session"
 )
 
 func executionAction(path string) bool {

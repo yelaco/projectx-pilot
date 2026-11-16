@@ -19,7 +19,7 @@ import (
 	"time"
 	"unsafe"
 
-	"projectxbot/internal/signal"
+	"github.com/yelaco/projectx-pilot/internal/signal"
 )
 
 var ErrDuplicate = errors.New("signal ID already exists; duplicate ignored")

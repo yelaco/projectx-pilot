@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"projectxbot/internal/risk"
+	"github.com/yelaco/projectx-pilot/internal/risk"
 )
 
 func parseTradeManager(r *http.Request) (risk.Profile, error) {

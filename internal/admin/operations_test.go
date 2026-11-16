@@ -4,9 +4,9 @@ import (
 	"testing"
 	"time"
 
-	"projectxbot/internal/config"
-	"projectxbot/internal/risk"
-	"projectxbot/internal/session"
+	"github.com/yelaco/projectx-pilot/internal/config"
+	"github.com/yelaco/projectx-pilot/internal/risk"
+	"github.com/yelaco/projectx-pilot/internal/session"
 )
 
 func TestOperationPlansHierarchyAndPersistence(t *testing.T) {

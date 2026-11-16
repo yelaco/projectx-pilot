@@ -5,8 +5,8 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
-	"projectxbot/internal/config"
-	"projectxbot/internal/risk"
+	"github.com/yelaco/projectx-pilot/internal/config"
+	"github.com/yelaco/projectx-pilot/internal/risk"
 	"strings"
 	"time"
 )

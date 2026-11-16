@@ -2,7 +2,7 @@ package dashboard
 
 import (
 	"net/http/httptest"
-	"projectxbot/internal/app"
+	"github.com/yelaco/projectx-pilot/internal/app"
 	"strings"
 	"testing"
 )

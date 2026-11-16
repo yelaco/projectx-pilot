@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"projectxbot/internal/news"
+	"github.com/yelaco/projectx-pilot/internal/news"
 	"testing"
 	"time"
 
-	"projectxbot/internal/projectx"
-	"projectxbot/internal/session"
+	"github.com/yelaco/projectx-pilot/internal/projectx"
+	"github.com/yelaco/projectx-pilot/internal/session"
 )
 
 func TestNewsEntryGateAndProtection(t *testing.T) {

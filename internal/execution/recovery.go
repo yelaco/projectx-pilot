@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"projectxbot/internal/projectx"
-	"projectxbot/internal/session"
+	"github.com/yelaco/projectx-pilot/internal/projectx"
+	"github.com/yelaco/projectx-pilot/internal/session"
 )
 
 const legacyOCOLock = "protective orders missing, pending or inconsistent"

@@ -5,8 +5,8 @@ import (
 	"sort"
 	"time"
 
-	"projectxbot/internal/config"
-	"projectxbot/internal/session"
+	"github.com/yelaco/projectx-pilot/internal/config"
+	"github.com/yelaco/projectx-pilot/internal/session"
 )
 
 type OperationDay struct {

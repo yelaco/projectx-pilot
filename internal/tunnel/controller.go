@@ -10,8 +10,8 @@ import (
 	"sync"
 	"time"
 
-	"projectxbot/internal/ingress"
-	"projectxbot/internal/storage"
+	"github.com/yelaco/projectx-pilot/internal/ingress"
+	"github.com/yelaco/projectx-pilot/internal/storage"
 )
 
 type Status struct{ State, Error string }

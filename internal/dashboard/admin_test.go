@@ -8,17 +8,17 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"projectxbot/internal/projectx"
-	"projectxbot/internal/signal"
-	"projectxbot/internal/storage"
+	"github.com/yelaco/projectx-pilot/internal/projectx"
+	"github.com/yelaco/projectx-pilot/internal/signal"
+	"github.com/yelaco/projectx-pilot/internal/storage"
 	"regexp"
 	"strings"
 	"testing"
 	"time"
 
-	"projectxbot/internal/admin"
-	"projectxbot/internal/app"
-	"projectxbot/internal/config"
+	"github.com/yelaco/projectx-pilot/internal/admin"
+	"github.com/yelaco/projectx-pilot/internal/app"
+	"github.com/yelaco/projectx-pilot/internal/config"
 )
 
 func TestAdminSettingsSecurityAndPersistence(t *testing.T) {

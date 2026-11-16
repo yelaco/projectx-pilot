@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"projectxbot/internal/admin"
-	"projectxbot/internal/app"
-	"projectxbot/internal/config"
+	"github.com/yelaco/projectx-pilot/internal/admin"
+	"github.com/yelaco/projectx-pilot/internal/app"
+	"github.com/yelaco/projectx-pilot/internal/config"
 )
 
 func managementFixture(t *testing.T) (*admin.Manager, string, http.Handler) {

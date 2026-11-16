@@ -3,7 +3,7 @@ package tests
 import (
 	"context"
 	"os"
-	"projectxbot/internal/projectx"
+	"github.com/yelaco/projectx-pilot/internal/projectx"
 	"testing"
 	"time"
 )

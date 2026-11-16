@@ -2,8 +2,8 @@ package execution
 
 import (
 	"context"
-	"projectxbot/internal/projectx"
-	"projectxbot/internal/storage"
+	"github.com/yelaco/projectx-pilot/internal/projectx"
+	"github.com/yelaco/projectx-pilot/internal/storage"
 	"strings"
 	"testing"
 )

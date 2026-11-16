@@ -10,16 +10,16 @@ import (
 	"testing"
 	"time"
 
-	"projectxbot/internal/app"
-	"projectxbot/internal/execution"
-	"projectxbot/internal/fleet"
-	"projectxbot/internal/ingress"
-	"projectxbot/internal/notify"
-	"projectxbot/internal/projectx"
-	"projectxbot/internal/session"
-	"projectxbot/internal/signal"
-	"projectxbot/internal/storage"
-	"projectxbot/internal/webhook"
+	"github.com/yelaco/projectx-pilot/internal/app"
+	"github.com/yelaco/projectx-pilot/internal/execution"
+	"github.com/yelaco/projectx-pilot/internal/fleet"
+	"github.com/yelaco/projectx-pilot/internal/ingress"
+	"github.com/yelaco/projectx-pilot/internal/notify"
+	"github.com/yelaco/projectx-pilot/internal/projectx"
+	"github.com/yelaco/projectx-pilot/internal/session"
+	"github.com/yelaco/projectx-pilot/internal/signal"
+	"github.com/yelaco/projectx-pilot/internal/storage"
+	"github.com/yelaco/projectx-pilot/internal/webhook"
 )
 
 type multiFlow struct {

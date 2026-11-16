@@ -1,5 +1,5 @@
 [Unit]
-Description=ProjectX alert inbox ingress only (no execution)
+Description=ProjectX Pilot alert inbox ingress only (no execution)
 After=projectx-bot.service
 PartOf=projectx-bot.service
 StartLimitIntervalSec=300

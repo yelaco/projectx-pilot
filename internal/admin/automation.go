@@ -9,8 +9,8 @@ import (
 	"fmt"
 	"time"
 
-	"projectxbot/internal/automation"
-	"projectxbot/internal/storage"
+	"github.com/yelaco/projectx-pilot/internal/automation"
+	"github.com/yelaco/projectx-pilot/internal/storage"
 )
 
 // profileScope binds saved trading setup to the exact source, profile,

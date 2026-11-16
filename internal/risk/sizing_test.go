@@ -2,8 +2,8 @@ package risk
 
 import (
 	"math"
-	"projectxbot/internal/projectx"
-	"projectxbot/internal/signal"
+	"github.com/yelaco/projectx-pilot/internal/projectx"
+	"github.com/yelaco/projectx-pilot/internal/signal"
 	"testing"
 	"time"
 )

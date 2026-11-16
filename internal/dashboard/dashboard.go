@@ -18,18 +18,18 @@ import (
 	"strings"
 	"time"
 
-	"projectxbot/internal/access"
-	"projectxbot/internal/admin"
-	"projectxbot/internal/app"
-	"projectxbot/internal/execution"
-	"projectxbot/internal/fleet"
-	"projectxbot/internal/ingress"
-	"projectxbot/internal/news"
-	"projectxbot/internal/projectx"
-	"projectxbot/internal/realtime"
-	"projectxbot/internal/risk"
-	"projectxbot/internal/session"
-	"projectxbot/internal/storage"
+	"github.com/yelaco/projectx-pilot/internal/access"
+	"github.com/yelaco/projectx-pilot/internal/admin"
+	"github.com/yelaco/projectx-pilot/internal/app"
+	"github.com/yelaco/projectx-pilot/internal/execution"
+	"github.com/yelaco/projectx-pilot/internal/fleet"
+	"github.com/yelaco/projectx-pilot/internal/ingress"
+	"github.com/yelaco/projectx-pilot/internal/news"
+	"github.com/yelaco/projectx-pilot/internal/projectx"
+	"github.com/yelaco/projectx-pilot/internal/realtime"
+	"github.com/yelaco/projectx-pilot/internal/risk"
+	"github.com/yelaco/projectx-pilot/internal/session"
+	"github.com/yelaco/projectx-pilot/internal/storage"
 )
 
 //go:embed admin.html pages/*.html
@@ -97,6 +97,7 @@ func handler(s *app.Service, token string, m *admin.Manager) http.Handler {
 	expected := sha256.Sum256([]byte(token))
 	// Derive a domain-separated form token from the persisted admin secret.
 	// Open tabs remain valid across restarts; password rotation invalidates them.
+	// Keep the CSRF protocol identifier stable across product/module renames.
 	mac := hmac.New(sha256.New, []byte(token))
 	_, _ = mac.Write([]byte("projectxbot/local-admin/csrf/v1"))
 	fallbackCSRF := hex.EncodeToString(mac.Sum(nil))

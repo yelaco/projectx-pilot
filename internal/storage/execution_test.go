@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
-	"projectxbot/internal/signal"
+	"github.com/yelaco/projectx-pilot/internal/signal"
 	"sync"
 	"sync/atomic"
 	"testing"

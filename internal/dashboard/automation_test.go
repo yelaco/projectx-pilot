@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"projectxbot/internal/admin"
-	"projectxbot/internal/risk"
+	"github.com/yelaco/projectx-pilot/internal/admin"
+	"github.com/yelaco/projectx-pilot/internal/risk"
 )
 
 func TestAutomaticRoutingTabDefaultsAndApprovalSecurity(t *testing.T) {

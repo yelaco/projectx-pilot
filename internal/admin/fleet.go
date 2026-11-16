@@ -15,12 +15,12 @@ import (
 	"sync"
 	"time"
 
-	"projectxbot/internal/config"
-	"projectxbot/internal/execution"
-	"projectxbot/internal/fleet"
-	"projectxbot/internal/risk"
-	"projectxbot/internal/session"
-	"projectxbot/internal/storage"
+	"github.com/yelaco/projectx-pilot/internal/config"
+	"github.com/yelaco/projectx-pilot/internal/execution"
+	"github.com/yelaco/projectx-pilot/internal/fleet"
+	"github.com/yelaco/projectx-pilot/internal/risk"
+	"github.com/yelaco/projectx-pilot/internal/session"
+	"github.com/yelaco/projectx-pilot/internal/storage"
 )
 
 func (m *Manager) setupPath() string {

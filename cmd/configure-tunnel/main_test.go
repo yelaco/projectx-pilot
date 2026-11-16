@@ -7,7 +7,7 @@ import (
 	"syscall"
 	"testing"
 
-	"projectxbot/internal/ingress"
+	"github.com/yelaco/projectx-pilot/internal/ingress"
 )
 
 const mockToken = "OFFLINE_MOCK_TOKEN_NOT_A_REAL_CLOUDFLARE_SECRET"

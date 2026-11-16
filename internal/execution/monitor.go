@@ -6,7 +6,7 @@ import (
 	"math"
 	"time"
 
-	"projectxbot/internal/projectx"
+	"github.com/yelaco/projectx-pilot/internal/projectx"
 )
 
 // Run reconciles all recovered intents before any new arming is possible.

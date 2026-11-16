@@ -7,12 +7,12 @@ import (
 	"sort"
 	"time"
 
-	"projectxbot/internal/app"
-	"projectxbot/internal/execution"
-	"projectxbot/internal/fleet"
-	"projectxbot/internal/realtime"
-	"projectxbot/internal/storage"
-	"projectxbot/internal/tunnel"
+	"github.com/yelaco/projectx-pilot/internal/app"
+	"github.com/yelaco/projectx-pilot/internal/execution"
+	"github.com/yelaco/projectx-pilot/internal/fleet"
+	"github.com/yelaco/projectx-pilot/internal/realtime"
+	"github.com/yelaco/projectx-pilot/internal/storage"
+	"github.com/yelaco/projectx-pilot/internal/tunnel"
 )
 
 type ExecutionMonitor struct {

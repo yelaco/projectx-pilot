@@ -3,7 +3,7 @@ package app
 import (
 	"context"
 	"errors"
-	"projectxbot/internal/projectx"
+	"github.com/yelaco/projectx-pilot/internal/projectx"
 	"testing"
 	"time"
 )

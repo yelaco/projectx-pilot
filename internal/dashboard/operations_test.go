@@ -9,10 +9,10 @@ import (
 	"strings"
 	"testing"
 
-	"projectxbot/internal/admin"
-	"projectxbot/internal/app"
-	"projectxbot/internal/config"
-	"projectxbot/internal/risk"
+	"github.com/yelaco/projectx-pilot/internal/admin"
+	"github.com/yelaco/projectx-pilot/internal/app"
+	"github.com/yelaco/projectx-pilot/internal/config"
+	"github.com/yelaco/projectx-pilot/internal/risk"
 )
 
 func TestOperationDaysPageAndProtectedSave(t *testing.T) {

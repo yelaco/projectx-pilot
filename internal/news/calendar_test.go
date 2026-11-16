@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"projectxbot/internal/session"
+	"github.com/yelaco/projectx-pilot/internal/session"
 )
 
 type roundTrip func(*http.Request) (*http.Response, error)

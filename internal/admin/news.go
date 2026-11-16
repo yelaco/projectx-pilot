@@ -2,7 +2,7 @@ package admin
 
 import (
 	"context"
-	"projectxbot/internal/news"
+	"github.com/yelaco/projectx-pilot/internal/news"
 )
 
 func (m *Manager) RunNews(ctx context.Context) {

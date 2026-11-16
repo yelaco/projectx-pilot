@@ -7,10 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"projectxbot/internal/admin"
-	"projectxbot/internal/app"
-	"projectxbot/internal/projectx"
-	"projectxbot/internal/risk"
+	"github.com/yelaco/projectx-pilot/internal/admin"
+	"github.com/yelaco/projectx-pilot/internal/app"
+	"github.com/yelaco/projectx-pilot/internal/projectx"
+	"github.com/yelaco/projectx-pilot/internal/risk"
 )
 
 func TestProfileExecutionSetupDoesNotRequirePracticePage(t *testing.T) {

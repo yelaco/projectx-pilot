@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"projectxbot/internal/execution"
-	"projectxbot/internal/risk"
+	"github.com/yelaco/projectx-pilot/internal/execution"
+	"github.com/yelaco/projectx-pilot/internal/risk"
 )
 
 func automaticFixture(t *testing.T) (*Manager, string, string, string, string) {

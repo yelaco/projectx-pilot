@@ -3,9 +3,9 @@ package admin
 import (
 	"context"
 	"encoding/json"
-	"projectxbot/internal/app"
-	"projectxbot/internal/risk"
-	"projectxbot/internal/signal"
+	"github.com/yelaco/projectx-pilot/internal/app"
+	"github.com/yelaco/projectx-pilot/internal/risk"
+	"github.com/yelaco/projectx-pilot/internal/signal"
 	"testing"
 	"time"
 )

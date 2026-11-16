@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"projectxbot/internal/projectx"
+	"github.com/yelaco/projectx-pilot/internal/projectx"
 )
 
 func TestOperationDayExecutionHierarchy(t *testing.T) {

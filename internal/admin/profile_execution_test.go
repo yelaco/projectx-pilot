@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"projectxbot/internal/app"
-	"projectxbot/internal/execution"
-	"projectxbot/internal/risk"
+	"github.com/yelaco/projectx-pilot/internal/app"
+	"github.com/yelaco/projectx-pilot/internal/execution"
+	"github.com/yelaco/projectx-pilot/internal/risk"
 )
 
 func TestProfileCanEnableAndGrantWithoutPracticeExecution(t *testing.T) {

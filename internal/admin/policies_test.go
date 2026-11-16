@@ -4,9 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"projectxbot/internal/app"
-	"projectxbot/internal/config"
-	"projectxbot/internal/projectx"
+	"github.com/yelaco/projectx-pilot/internal/app"
+	"github.com/yelaco/projectx-pilot/internal/config"
+	"github.com/yelaco/projectx-pilot/internal/projectx"
 )
 
 type accountReader struct{}

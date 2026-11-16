@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"projectxbot/internal/signal"
+	"github.com/yelaco/projectx-pilot/internal/signal"
 )
 
 func record(id string) Record {

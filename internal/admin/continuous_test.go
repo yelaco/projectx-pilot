@@ -7,11 +7,11 @@ import (
 	"testing"
 	"time"
 
-	"projectxbot/internal/app"
-	"projectxbot/internal/execution"
-	"projectxbot/internal/projectx"
-	"projectxbot/internal/session"
-	"projectxbot/internal/signal"
+	"github.com/yelaco/projectx-pilot/internal/app"
+	"github.com/yelaco/projectx-pilot/internal/execution"
+	"github.com/yelaco/projectx-pilot/internal/projectx"
+	"github.com/yelaco/projectx-pilot/internal/session"
+	"github.com/yelaco/projectx-pilot/internal/signal"
 )
 
 type runReader struct{ accountReader }

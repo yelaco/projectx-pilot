@@ -12,7 +12,7 @@ import (
 	"strings"
 	"sync"
 
-	"projectxbot/internal/config"
+	"github.com/yelaco/projectx-pilot/internal/config"
 )
 
 type PriceMapping struct {

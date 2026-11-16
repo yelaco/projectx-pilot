@@ -4,7 +4,7 @@ import (
 	"context"
 	"log/slog"
 
-	"projectxbot/internal/storage"
+	"github.com/yelaco/projectx-pilot/internal/storage"
 )
 
 // Handler preserves ordinary console logging while writing a strict allowlist of

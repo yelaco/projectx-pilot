@@ -1,5 +1,5 @@
 [Unit]
-Description=Local ProjectX trading manager (disarmed on startup)
+Description=ProjectX Pilot trading manager (disarmed on startup)
 Wants=projectx-webhook.service
 StartLimitIntervalSec=300
 StartLimitBurst=5

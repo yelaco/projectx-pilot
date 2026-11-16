@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strconv"
 
-	"projectxbot/internal/storage"
+	"github.com/yelaco/projectx-pilot/internal/storage"
 )
 
 func (m *Manager) remoteStore() (*storage.Inbox, error) {

@@ -2,7 +2,7 @@ package dashboard
 
 import (
 	"net/url"
-	"projectxbot/internal/admin"
+	"github.com/yelaco/projectx-pilot/internal/admin"
 	"strings"
 	"testing"
 )

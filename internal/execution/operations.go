@@ -2,7 +2,7 @@ package execution
 
 import (
 	"errors"
-	"projectxbot/internal/session"
+	"github.com/yelaco/projectx-pilot/internal/session"
 	"time"
 )
 

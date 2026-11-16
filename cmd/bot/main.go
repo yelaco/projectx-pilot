@@ -12,14 +12,14 @@ import (
 	"syscall"
 	"time"
 
-	"projectxbot/internal/admin"
-	"projectxbot/internal/app"
-	"projectxbot/internal/config"
-	"projectxbot/internal/dashboard"
-	"projectxbot/internal/notify"
-	"projectxbot/internal/observability"
-	"projectxbot/internal/storage"
-	"projectxbot/internal/tunnel"
+	"github.com/yelaco/projectx-pilot/internal/admin"
+	"github.com/yelaco/projectx-pilot/internal/app"
+	"github.com/yelaco/projectx-pilot/internal/config"
+	"github.com/yelaco/projectx-pilot/internal/dashboard"
+	"github.com/yelaco/projectx-pilot/internal/notify"
+	"github.com/yelaco/projectx-pilot/internal/observability"
+	"github.com/yelaco/projectx-pilot/internal/storage"
+	"github.com/yelaco/projectx-pilot/internal/tunnel"
 )
 
 func main() {
@@ -100,7 +100,7 @@ func run() error {
 	go func() { defer close(done); service.Run(ctx, c.RefreshInterval, log) }()
 	failures := make(chan error, 1)
 	go func() { failures <- srv.ListenAndServe() }()
-	log.Info("local trading manager started", "listen", c.DashboardListen, "execution_enabled", false, "password_file", *stateDir+"/admin-password")
+	log.Info("ProjectX Pilot started", "listen", c.DashboardListen, "execution_enabled", false, "password_file", *stateDir+"/admin-password")
 	select {
 	case <-ctx.Done():
 	case err = <-failures:

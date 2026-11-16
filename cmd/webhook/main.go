@@ -14,9 +14,9 @@ import (
 	"syscall"
 	"time"
 
-	"projectxbot/internal/notify"
-	"projectxbot/internal/storage"
-	"projectxbot/internal/webhook"
+	"github.com/yelaco/projectx-pilot/internal/notify"
+	"github.com/yelaco/projectx-pilot/internal/storage"
+	"github.com/yelaco/projectx-pilot/internal/webhook"
 )
 
 func main() {

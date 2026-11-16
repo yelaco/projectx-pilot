@@ -4,9 +4,9 @@ import (
 	"net/http"
 	"strings"
 
-	"projectxbot/internal/admin"
-	"projectxbot/internal/projectx"
-	"projectxbot/internal/risk"
+	"github.com/yelaco/projectx-pilot/internal/admin"
+	"github.com/yelaco/projectx-pilot/internal/projectx"
+	"github.com/yelaco/projectx-pilot/internal/risk"
 )
 
 func pageInfo(path string) (name, nav, title, subtitle string) {

@@ -1,4 +1,8 @@
-# TopstepX local trading application
+# ProjectX Pilot
+
+Local trading automation and account management for ProjectX Gateway.
+
+ProjectX Pilot is an independent community project, unaffiliated with ProjectX or Topstep.
 
 Native Go local administration, notification inbox, and **concurrent automatic account runners and manual Practice market/limit tests**. Defaults remain read-only and disarmed. Practice execution reaches ProjectX; it is not paper mode. No trading request was sent during development.
 
@@ -63,3 +67,11 @@ Settings → News filter; see [feed coverage and limitations](docs/news-filter.m
 
 Plan general and per-Trade Manager Saturday–Friday calendars on **Operation days**.
 See [hierarchy and execution behavior](docs/operation-days.md).
+
+## Project identity and existing installations
+
+Repository: `https://github.com/yelaco/projectx-pilot`
+
+Go module: `github.com/yelaco/projectx-pilot`
+
+The ProjectX Pilot rename preserves the existing `projectx-bot`, `projectx-webhook` and `projectx-tunnel` service names, executable names and private configuration/state directories. Existing credentials, databases, webhook URLs and saved profiles require no rename or migration. The normal update procedure still applies; a service restart starts execution paused.

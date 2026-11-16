@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"gopkg.in/yaml.v3"
-	"projectxbot/internal/session"
+	"github.com/yelaco/projectx-pilot/internal/session"
 )
 
 type Config struct {

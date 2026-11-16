@@ -15,11 +15,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	"projectxbot/internal/execution"
-	"projectxbot/internal/risk"
-	"projectxbot/internal/session"
-	"projectxbot/internal/signal"
-	"projectxbot/internal/storage"
+	"github.com/yelaco/projectx-pilot/internal/execution"
+	"github.com/yelaco/projectx-pilot/internal/risk"
+	"github.com/yelaco/projectx-pilot/internal/session"
+	"github.com/yelaco/projectx-pilot/internal/signal"
+	"github.com/yelaco/projectx-pilot/internal/storage"
 )
 
 type Plan struct {

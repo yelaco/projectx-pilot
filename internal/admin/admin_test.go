@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"projectxbot/internal/config"
+	"github.com/yelaco/projectx-pilot/internal/config"
 )
 
 func setup(t *testing.T) (*Manager, string, string, string) {

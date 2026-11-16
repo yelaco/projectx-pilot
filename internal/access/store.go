@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
-	"projectxbot/internal/config"
+	"github.com/yelaco/projectx-pilot/internal/config"
 )
 
 type Info struct {

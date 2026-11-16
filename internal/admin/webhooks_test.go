@@ -2,7 +2,7 @@ package admin
 
 import (
 	"encoding/json"
-	"projectxbot/internal/ingress"
+	"github.com/yelaco/projectx-pilot/internal/ingress"
 	"strings"
 	"testing"
 	"time"

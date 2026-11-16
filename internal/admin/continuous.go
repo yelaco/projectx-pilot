@@ -9,9 +9,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"projectxbot/internal/config"
-	"projectxbot/internal/execution"
-	"projectxbot/internal/session"
+	"github.com/yelaco/projectx-pilot/internal/config"
+	"github.com/yelaco/projectx-pilot/internal/execution"
+	"github.com/yelaco/projectx-pilot/internal/session"
 )
 
 // SaveContinuousSetup is one-time local authorization of the selected risk policy,

@@ -12,13 +12,13 @@ import (
 	"syscall"
 	"time"
 
-	"projectxbot/internal/config"
-	"projectxbot/internal/execution"
-	"projectxbot/internal/projectx"
-	"projectxbot/internal/realtime"
-	"projectxbot/internal/session"
-	"projectxbot/internal/signal"
-	"projectxbot/internal/storage"
+	"github.com/yelaco/projectx-pilot/internal/config"
+	"github.com/yelaco/projectx-pilot/internal/execution"
+	"github.com/yelaco/projectx-pilot/internal/projectx"
+	"github.com/yelaco/projectx-pilot/internal/realtime"
+	"github.com/yelaco/projectx-pilot/internal/session"
+	"github.com/yelaco/projectx-pilot/internal/signal"
+	"github.com/yelaco/projectx-pilot/internal/storage"
 )
 
 func (m *Manager) executionFactory() execution.Factory {

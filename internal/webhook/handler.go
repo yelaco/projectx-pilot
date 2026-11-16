@@ -11,12 +11,12 @@ import (
 	"log/slog"
 	"mime"
 	"net/http"
-	"projectxbot/internal/ingress"
+	"github.com/yelaco/projectx-pilot/internal/ingress"
 	"sync"
 	"time"
 
-	"projectxbot/internal/signal"
-	"projectxbot/internal/storage"
+	"github.com/yelaco/projectx-pilot/internal/signal"
+	"github.com/yelaco/projectx-pilot/internal/storage"
 )
 
 type Sink interface {

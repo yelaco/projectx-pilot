@@ -3,7 +3,7 @@ package admin
 import (
 	"context"
 	"errors"
-	"projectxbot/internal/realtime"
+	"github.com/yelaco/projectx-pilot/internal/realtime"
 )
 
 func (m *Manager) userToken(ctx context.Context) (string, error) {

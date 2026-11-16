@@ -1,4 +1,4 @@
-module projectxbot
+module github.com/yelaco/projectx-pilot
 
 go 1.23.0
 

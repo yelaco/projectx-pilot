@@ -4,10 +4,10 @@ import (
 	"context"
 	"net/http/httptest"
 	"net/url"
-	"projectxbot/internal/app"
+	"github.com/yelaco/projectx-pilot/internal/app"
 
-	"projectxbot/internal/execution"
-	"projectxbot/internal/risk"
+	"github.com/yelaco/projectx-pilot/internal/execution"
+	"github.com/yelaco/projectx-pilot/internal/risk"
 	"strings"
 	"testing"
 )

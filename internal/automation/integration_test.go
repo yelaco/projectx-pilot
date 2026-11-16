@@ -13,15 +13,15 @@ import (
 	"testing"
 	"time"
 
-	"projectxbot/internal/execution"
-	"projectxbot/internal/ingress"
-	"projectxbot/internal/projectx"
-	"projectxbot/internal/realtime"
-	"projectxbot/internal/risk"
-	"projectxbot/internal/session"
-	"projectxbot/internal/signal"
-	"projectxbot/internal/storage"
-	"projectxbot/internal/webhook"
+	"github.com/yelaco/projectx-pilot/internal/execution"
+	"github.com/yelaco/projectx-pilot/internal/ingress"
+	"github.com/yelaco/projectx-pilot/internal/projectx"
+	"github.com/yelaco/projectx-pilot/internal/realtime"
+	"github.com/yelaco/projectx-pilot/internal/risk"
+	"github.com/yelaco/projectx-pilot/internal/session"
+	"github.com/yelaco/projectx-pilot/internal/signal"
+	"github.com/yelaco/projectx-pilot/internal/storage"
+	"github.com/yelaco/projectx-pilot/internal/webhook"
 )
 
 // mockGateway records actual typed write requests produced by the real engine;
