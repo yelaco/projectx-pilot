@@ -2,76 +2,52 @@
 
 Local trading automation and account management for ProjectX Gateway.
 
-ProjectX Pilot is an independent community project, unaffiliated with ProjectX or Topstep.
+Connect TradingView alerts to account-specific execution runners, manage risk policies, and monitor orders from a local web dashboard. Built with Go and SQLite, with native systemd services for Arch Linux.
 
-Native Go local administration, notification inbox, and **concurrent automatic account runners and manual Practice market/limit tests**. Defaults remain read-only and disarmed. Practice execution reaches ProjectX; it is not paper mode. No trading request was sent during development.
+## Features
 
-Open **Practice execution** (`/execution`) after updating. Configure one Practice account and single-account Trade Manager, grant account eligibility, verify Auto OCO/session hours, and arm. Enter Buy/Sell, exact contract count, stop/target ticks and a limit price when appropriate. **Market Order** and **Limit Order** calculate a preview; a separate password-confirmed approval submits. See the [step-by-step execution guide](docs/manual-execution.md).
+- **Automation profiles** — webhook URLs, delivery tokens, and BUY/SELL message templates for each strategy.
+- **Multiple accounts** — route one signal to several accounts, or run separate profiles on different accounts.
+- **Trade managers** — calculate whole-contract position sizes from stop distance, planned risk, fees, and slippage.
+- **Execution monitoring** — track orders, positions, protection, delivery outcomes, logs, and acceptance latency.
+- **Trading schedules** — general and per-manager operation days, session cutoffs, and US FOMC filtering.
+- **Local controls** — pause entries or request emergency flattening globally, per profile, or per account.
 
-Account API data does not identify Practice specifically or expose MLL. Simplified Trade Managers use maximum planned risk per trade only: no manual account floor, MLL calculation, daily-loss or trade-count cap. Existing managers keep legacy limits until saved. Session/holiday checks remain; merged holiday sessions are unsupported. Webhook alerts default to review. Automatic TradingView routing is implemented behind exact-profile configuration and explicit local Start; it has not been enabled here. Multi-account automatic execution is supported; paper simulation remains unavailable.
+## Getting started
 
-For automatic alerts, use **Automation → Automatic execution** to pin the contract/order type, complete its one-time Trading setup, then use the single Start/Pause control. Start remains active across verified session boundaries while the process runs. Practice execution is for manual tickets. [Automatic execution setup](docs/automatic-execution.md).
-
-**Execution runners** (`/runners`) provides global Pause/Resume, confirmed flatten-all, per-account controls, readiness, delivery outcomes and arrival-to-acceptance timing. Different profiles can run on distinct accounts, and a manager can target up to 20 accounts. Risk is independent per account; there is no portfolio-wide cap. Automatic accounts must be eligible simulated Practice/Combine/Express Funded; Live Funded is unsupported by the official API. Continuous calendar coverage remains reviewed 2026 MNQ/MGC only. See [architecture and routing diagram](docs/architecture.md).
-
-## One setup command
+On your Arch Linux trading computer, run as your regular user:
 
 ```sh
+git clone https://github.com/yelaco/projectx-pilot.git
+cd projectx-pilot
 ./scripts/install-user-service.sh
 ```
 
-On Arch this installs missing build/tunnel packages (sudo for packages only), runs checks, builds and starts the native user services, preserves existing settings and opens the admin page when possible. It prints the local admin password. Before the first upgrade from the old manual workflow, stop your manually launched receiver/tunnel terminals once; the installer does not kill unrelated processes.
+The installer checks dependencies, builds the application, and starts its user services. It prints your initial login details. Package installation may require sudo.
 
-Open **http://127.0.0.1:8080**, username **local**. Configure your ProjectX connection, Practice account and automation profiles in the browser. Use **Settings → Webhook & tunnel → Use Cloudflare preset** to enable inbox receiving and the managed test tunnel together. No manually generated/exported webhook token is required. Full per-profile webhook URLs are shown in the automation list and profile detail. Change/add/revoke administrator logins in **Settings → Admin access**. Reusable **Trade managers** configure risk/session limits and single/multiple-account routing. Automatic profiles route to all selected accounts independently; each account has one owner. Each TradingView profile gets a private token, profile URL and BUY/SELL template drafts; rotate credentials and configure verified indicator price placeholders on the page. Unknown Swift Algo stop/target fields remain explicit mapping requirements rather than guessed values.
+Open **http://127.0.0.1:8080**, then:
 
-The dashboard has focused Overview, Automations, Trade managers, Inbox, Accounts, Activity and Settings pages, with profile-specific tabs for credentials and messages. It is also a monitor: receiver/tunnel/connection status, uptime, queue counts and persistent sanitized activity update every ten seconds. Filter/search the activity feed and export a monitor snapshot. A dedicated webhook/tunnel running log on the connection settings page updates every three seconds and supports pause, component filtering and search. Config forms remain untouched. Review-only alerts cannot submit orders. A configured, locally started automatic profile can submit new alerts; its outcomes appear in Inbox, the profile and **Execution runners**.
+1. Configure your ProjectX connection and discover your accounts.
+2. Create a Trade Manager and an automation profile. Configure its routing, trading setup, and webhook messages.
+3. Enable webhook receiving, configure delivery, and click **Start automation** when ready. Check **Execution runners** for each account's readiness.
 
-See the [admin and monitoring guide](docs/admin-guide.md) for the complete workflow, migration, template mappings, monitor limits and Quick Tunnel URL changes. The [webhook guide](docs/webhook-receiver.md) contains protocol details and legacy manual startup instructions.
+The application starts **read-only and disarmed**. Receiving an alert alone does not authorize trading. See the [automatic execution guide](docs/automatic-execution.md) for the complete setup.
 
-For a developer-only run, build `cmd/bot` and `cmd/webhook` with CGO and system SQLite headers. Normal installed use relies on the two managed user services. An example config is in `config/example.yaml`; private runtime state includes credentials, admin password, per-profile ingress settings, signal/delivery databases and bounded activity databases. File modes are 0600 in a 0700 directory. No credentials are encrypted at rest. Environment credentials remain optional overrides.
+## Supported scope
 
-## Verification
+Automatic execution supports eligible simulated Practice, Trading Combine, and Express Funded accounts. Manual API test tickets are Practice-only; Live Funded accounts are unsupported.
 
-```sh
-go test ./...
-go test -race ./...
-go vet ./...
-# Optional browser-script form regression checks (Node.js):
-node tests/dashboard-forms.test.cjs
-# Explicit opt-in, authenticated read-only integration check:
-PROJECTX_INTEGRATION=1 go test ./tests -run TestProjectXReadOnly -v
-```
+One running profile owns each account, with up to 20 targets per Trade Manager. Risk applies independently per account; fanout can partially succeed. Per-trade-only policies do not enforce Topstep MLL or an aggregate portfolio cap. Continuous session coverage is currently limited to reviewed **2026 MNQ/MGC** calendars. Restarts leave automation paused.
 
-No ordinary test needs credentials or network access. Tests use an injected HTTP transport and simulated REST failures. In restricted workspaces set `GOCACHE=/tmp/projectx-go-cache`. The installer builds with VCS stamping disabled; normal Git checkouts can omit that flag. Runtime credentials are never needed for compilation. The integration check sends authentication/account/contract requests only; ordinary tests skip it.
+## Documentation
 
-## Implemented scope
+| Guide | What you'll find |
+| --- | --- |
+| [Automation setup](docs/automatic-execution.md) | Profiles, account runners, routing, and updates |
+| [Dashboard](docs/admin-guide.md) | Configuration, monitoring, and administrator access |
+| [Webhook delivery](docs/named-tunnel-setup.md) | Permanent HTTPS hostname and tunnel setup |
+| [Risk and recovery](docs/risk-management.md) · [Recovery procedures](docs/recovery-procedures.md) | Sizing, protection, failure handling, and restart behavior |
+| [Linux deployment](docs/deployment-archlinux.md) | Services, logs, upgrades, and laptop operation |
+| [Architecture](docs/architecture.md) · [Development](docs/development.md) | System design, builds, and tests |
 
-Authentication/renewal, account/contract discovery, local administration, notification receiving/tunnel management, credentials, signal review/dedup, per-account risk sizing, shared market quote subscriptions and user events, explicit arming/approval, durable market/limit placement, partial-fill/protective verification, immediate Unix-socket webhook dispatch with durable complete-target claims, active REST reconciliation, emergency management and restart recovery are implemented and mock-tested.
-
-This does not meet every original production acceptance criterion: automatic MLL/calendar inputs and paper simulation remain unavailable. Protection depends on reachable ProjectX and server-side Auto OCO; read the [recovery limits](docs/recovery-procedures.md) before testing. No authenticated write integration test has been run.
-
-See [architecture](docs/architecture.md), [API evidence](docs/projectx-api.md), [compliance](docs/topstep-compliance.md), and [deployment](docs/deployment-archlinux.md).
-
-For a permanent webhook hostname on this or another Arch laptop, use:
-
-```sh
-./scripts/install-user-service.sh --named-tunnel alerts.yelaco.trade
-```
-
-Paste the named tunnel token at the hidden prompt. Cloudflare domain/tunnel/route creation is one-time; the installer saves the URL, disables Quick Tunnel, and starts a non-root named connector. Stop the old connector before switching machines; profiles/credentials still need local configuration and trading starts paused. See [named tunnel setup](docs/named-tunnel-setup.md).
-
-Automation profiles now accept webhook signals only in the dashboard. Practice execution is a separate API order test with no automation profile requirement: choose the saved Practice account/Trade Manager, an allowed active contract, quantity and stop/target ticks. Preview never transmits an order; approval submits through the same risk/protection/idempotency engine. Dashboard manual JSON signal import is retired; stored review history remains readable.
-
-US FOMC meeting-day entry filtering is enabled by default. Configure it in
-Settings → News filter; see [feed coverage and limitations](docs/news-filter.md).
-
-Plan general and per-Trade Manager Saturday–Friday calendars on **Operation days**.
-See [hierarchy and execution behavior](docs/operation-days.md).
-
-## Project identity and existing installations
-
-Repository: `https://github.com/yelaco/projectx-pilot`
-
-Go module: `github.com/yelaco/projectx-pilot`
-
-The ProjectX Pilot rename preserves the existing `projectx-bot`, `projectx-webhook` and `projectx-tunnel` service names, executable names and private configuration/state directories. Existing credentials, databases, webhook URLs and saved profiles require no rename or migration. The normal update procedure still applies; a service restart starts execution paused.
+ProjectX Pilot is an independent community project, unaffiliated with ProjectX or Topstep. Local execution does not establish permission for a remote-signal workflow; review the [provider-policy boundaries](docs/topstep-compliance.md) before enabling it.

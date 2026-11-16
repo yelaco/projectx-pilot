@@ -49,3 +49,7 @@ Use `./scripts/install-user-service.sh --named-tunnel alerts.yelaco.trade` to pr
 Run the normal installer only with no unresolved intents and every account independently flat. It updates bot and receiver together, preserves configuration/credentials/tokens, and requires explicit Start again. A valid legacy single-profile setup migrates as configuration only; changed scope/calendar requires reconfirmation. No manual SQLite migration or Unix socket setup is needed. The main service creates the private inbox.sock after acquiring execution.lock; the receiver sends payload-free wake hints after commit. Both units allow AF_UNIX. The existing named Cloudflare connector does not change for a bot/receiver upgrade.
 
 Use Execution runners for global and per-account controls and timing. Do not run two installations/state directories against the same account. At most one running profile owns an account. Stopping systemd does not establish flatness and broker brackets cannot replace a reliable running laptop. No power-management or system-wide service settings are changed by this implementation.
+
+## Existing installations after the ProjectX Pilot rename
+
+The repository is now `https://github.com/yelaco/projectx-pilot`. The rename preserves `projectx-bot`, `projectx-webhook`, and `projectx-tunnel` service/executable names and the existing private configuration/state paths. Credentials, databases, webhook URLs, and saved profiles require no path migration. Use the normal installer to update; a service restart leaves automation paused.
