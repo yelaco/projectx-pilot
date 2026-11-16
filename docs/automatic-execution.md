@@ -6,10 +6,10 @@ Use **Automations → your profile → Automatic execution**. The main view has 
 
 Create or save the Trade Manager with just maximum planned risk per trade. Existing managers retain legacy limits until saved; saving pauses execution. Simplified policies have no account-floor, daily-loss or trade-count limits.
 
-1. Configure ProjectX and discover your Practice account. Assign a single-account Trade Manager in the automation's Signal routing section, select automatic handling, pin the actual contract expiry, and choose Market or Limit. Existing defaults remain review-only.
+1. Configure ProjectX and discover your eligible Practice, Trading Combine or Express Funded account. Assign a single-account Trade Manager in the automation's Signal routing section, select automatic handling, pin the actual contract expiry, and choose Market or Limit. Existing defaults remain review-only.
 2. Open **Trading setup**. Set estimated round-trip costs, slippage/deviation tolerance, and maximum contracts. Confirm real execution, Practice/Auto OCO, ordinary 17:00 Chicago session accounting and applicability of the reviewed calendar. Save with your administrator password. The selected account comes from the profile, and account eligibility is saved here too; no Practice execution visit is needed.
 3. Configure the profile's shared/separate BUY/SELL field mappings, enable inbox receiving/tunnel, and copy the complete profile URL and messages into TradingView. The tunnel must only reach notification ingress, never the admin/order client. No setup action automatically starts execution.
-4. Click **Start automation**. This explicit local action uses the existing authenticated login and CSRF protection; it does not require another password/date-entry form. New eligible alerts can now place actual ProjectX Practice orders. This is not application paper simulation.
+4. Click **Start automation**. This explicit local action uses the existing authenticated login and CSRF protection; it does not require another password/date-entry form. New eligible alerts can now place actual ProjectX orders on that selected account. This is not application paper simulation.
 
 Thereafter use **Pause automation** when you want to stop new entries. Pause preserves position monitoring and asks for cancellation of an entry remainder. Changing configuration, credentials or eligibility pauses the run. Only one profile/session can control the shared engine at a time; another profile cannot pause or flatten its execution.
 
@@ -36,7 +36,7 @@ The bundled schedule revision is `topstep-2026-reviewed-2026-11-13`, reviewed ag
 
 Normal entries end at 15:00 Chicago and the application flattens by 15:05. Published early-close deadlines get an additional five-minute flatten margin, with new entries ending five minutes before that. Weekends and published closed holidays are skipped. The timezone implementation handles DST independently of the desktop timezone.
 
-These are bounded reviewed calendar data, not a live exchange-calendar API. Unexpected closures, platform restrictions and stale data still block/reject entries. Dates beyond the reviewed 2026 calendar wait for an update; the controller does not invent next year's schedule. The one-time confirmation must accurately cover the selected Practice account’s ordinary session model. A simplified Trade Manager needs no account floor and does not enforce MLL; legacy policies still require a verified fixed floor.
+These are bounded reviewed calendar data, not a live exchange-calendar API. Unexpected closures, platform restrictions and stale data still block/reject entries. Dates beyond the reviewed 2026 calendar wait for an update; the controller does not invent next year's schedule. The one-time confirmation must accurately cover the selected account’s ordinary session model. A simplified Trade Manager needs no account floor and does not enforce MLL; legacy policies still require a verified fixed floor.
 
 ## Alert execution and recovery
 
@@ -67,3 +67,21 @@ This is evidence for the local implementation, not proof that a live TradingView
 Automatic quantity is `min(maximum_contracts, floor(risk_budget / estimated_risk_per_contract))`. The per-contract estimate is `stop_ticks * authoritative_tick_value + reserved_slippage_ticks * authoritative_tick_value + estimated_round_trip_fees_and_commissions`. Simplified managers supply their per-trade risk budget; legacy policies may further constrain it. Less than one contract is rejected. The receiver doesn't accept a caller-selected account or quantity. Practice API tickets instead retain the exact requested quantity and reject quantities outside risk/cap limits. Already-held exposure still blocks new entries.
 
 Current generated signal IDs include profile, instrument, direction and TradingView bar time, allowing at most one distinct signal per direction/bar; a repeated ID with different content is a conflict, not another trade. Keep alert frequency consistent with this identity rule. Invalid/unresolved numeric placeholders are rejected rather than replaced with guessed values.
+
+## API account eligibility (updated November 16, 2026)
+
+Automatic profiles now accept eligible Practice, Trading Combine (evaluation) and
+Express Funded accounts. The pinned numeric account ID controls routing. A fresh
+account discovery must return canTrade=true, simulated=true and a finite balance.
+Automatic arming does not require a PRAC prefix or an exact saved display name.
+Missing simulated status and simulated=false deny execution. Topstep's official
+[API policy](https://help.topstep.com/en/articles/11187768-topstepx-api-access)
+explicitly excludes Live Funded accounts; Express Funded and Live Funded must not
+be conflated. Existing account permissions, local Start, reconciliation, per-trade
+risk, session/news/operation-day checks, protection and idempotency still apply.
+Per-trade-only policies do not enforce MLL. No account permission, saved profile,
+arming or live orders were changed during implementation. Mock tests exercise
+routing on eligible simulated accounts; no evaluation/funded API order was sent.
+
+The separate Practice execution test page retains its PRAC-only restriction. This
+is a manual-test scope restriction, not a restriction on automatic profiles.

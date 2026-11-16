@@ -1,4 +1,4 @@
-// Package execution provides explicitly armed, locally approved Practice trading.
+// Package execution provides explicitly armed trading on eligible simulated accounts.
 package execution
 
 import (
@@ -70,10 +70,12 @@ type Authorization struct {
 	AutomationConfirmed bool
 	Window              session.Window
 	Floor               float64
-	PracticeConfirmed   bool
-	BracketsConfirmed   bool
-	FloorConfirmed      bool
-	AccountName         string
+	// PracticeConfirmed is the legacy field name for selected-account confirmation.
+	// Automatic execution additionally permits eligible simulated Combine/XFA accounts.
+	PracticeConfirmed bool
+	BracketsConfirmed bool
+	FloorConfirmed    bool
+	AccountName       string
 }
 type Intent struct {
 	HaltReason         string           `json:",omitempty"`

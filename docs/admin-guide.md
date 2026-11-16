@@ -146,3 +146,20 @@ shown first, followed by each Trade Manager. Lower calendars can add blocked
 dates but cannot override a general or automatic FOMC block. Saving pauses entries;
 monitoring and emergency management continue. See [operation days](operation-days.md)
 for session-date semantics, persistence and news-source limitations.
+
+## Access from another computer over SSH
+
+Keep the bot's admin listener at 127.0.0.1:8080. On your browser computer, with
+local port 8080 free and an authorized SSH login to the personal bot laptop:
+
+```sh
+ssh -N -o ExitOnForwardFailure=yes -L 127.0.0.1:8080:127.0.0.1:8080 your-user@bot-laptop
+```
+
+Open http://127.0.0.1:8080 on that computer and authenticate with the usual admin
+credentials. Keep SSH running while using the page. Host/origin checks require
+the matching port and address, so a different local port will be rejected. This
+forwards admin access only; no change to the public webhook tunnel or outbound
+ProjectX routing is required. Do not forward port 8080 through the public tunnel.
+SSH server/network setup is not performed by the bot installer. Remote dashboard
+access does not establish provider approval for an order-trigger workflow.

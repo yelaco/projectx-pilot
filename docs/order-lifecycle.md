@@ -1,6 +1,6 @@
 # Order lifecycle
 
-`internal/execution` now submits locally approved market and limit orders to one verified PRAC simulated account. Defaults remain read-only and disarmed. See [manual execution](manual-execution.md) for setup and operational boundaries.
+`internal/execution` now submits locally approved market and limit orders to one verified simulated account (Practice, Trading Combine or Express Funded for automatic profiles; PRAC only for manual tests). Defaults remain read-only and disarmed. See [manual execution](manual-execution.md) for setup and operational boundaries.
 
 Preview performs fresh contract/account/exposure/history/quote/session/risk checks without submitting. Submit revalidates the preview and reserves a unique signal ID and global active-account slot in SQLite before the network call. A unique `pxbot-…` customTag is persisted. There is no automatic placement retry.
 

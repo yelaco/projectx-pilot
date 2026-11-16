@@ -160,7 +160,7 @@ func (m *Manager) armExecutionLocked(ctx context.Context, a execution.Authorizat
 		}
 	}
 	if !granted {
-		return errors.New("grant execution eligibility for the pinned Practice account on Accounts first")
+		return errors.New("grant execution eligibility for the selected account on Accounts first")
 	}
 	if a.AccountName == "" && m.service != nil {
 		for _, account := range m.service.Snapshot().Accounts {

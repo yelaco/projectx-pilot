@@ -15,7 +15,7 @@ import (
 )
 
 // SaveContinuousSetup is one-time local authorization of the selected risk policy,
-// Practice/Auto OCO setup and reviewed calendar. It never starts the runner.
+// selected account/Auto OCO setup and reviewed calendar. It never starts the runner.
 func (m *Manager) SaveContinuousSetup(actor, password, id string, c execution.Config, allow bool, a execution.Authorization) error {
 	if err := m.reauthorize(actor, password); err != nil {
 		return err
@@ -31,7 +31,7 @@ func (m *Manager) SaveContinuousSetup(actor, password, id string, c execution.Co
 	}
 	perTrade := m.perTradeOnlyLocked(p.TradeManagerID)
 	if !a.PracticeConfirmed || !a.BracketsConfirmed || !a.Window.Verified || (!perTrade && (!a.FloorConfirmed || a.Floor <= 0 || math.IsNaN(a.Floor) || math.IsInf(a.Floor, 0))) {
-		return errors.New("confirm the Practice/Auto OCO setup and reviewed calendar (legacy policies also need a verified fixed floor)")
+		return errors.New("confirm the selected account/Auto OCO setup and reviewed calendar (legacy policies also need a verified fixed floor)")
 	}
 	name := ""
 	if m.service != nil {

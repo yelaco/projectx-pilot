@@ -204,7 +204,7 @@ func (e *Engine) Arm(ctx context.Context, c Config, p risk.Profile, a Authorizat
 		return err
 	}
 	if !a.PracticeConfirmed || !a.BracketsConfirmed || !finite(c.RoundTripCosts) || c.RoundTripCosts <= 0 || c.SlippageTicks < 1 || c.MaxQuantity < 1 || c.MaxQuantity > 100 || c.MaxDeviationTicks < 0 || c.MaxDeviationTicks > 100 {
-		return errors.New("confirm Practice account, Auto OCO mode and valid cost/slippage limits")
+		return errors.New("confirm the selected API account, Auto OCO mode and valid cost/slippage limits")
 	}
 	if !p.PerTradeOnly && (!a.FloorConfirmed || !finite(a.Floor) || a.Floor <= 0) {
 		return errors.New("legacy policy requires a verified fixed account loss floor; save the Trade Manager to switch to per-trade-only")
@@ -230,8 +230,8 @@ func (e *Engine) Arm(ctx context.Context, c Config, p risk.Profile, a Authorizat
 	if err != nil {
 		return err
 	}
-	if account.Name != a.AccountName || !strings.HasPrefix(strings.ToUpper(account.Name), "PRAC") {
-		return errors.New("confirm the exact PRAC account name; evaluation and funded accounts are unsupported")
+	if !c.Automated && (account.Name != a.AccountName || !strings.HasPrefix(strings.ToUpper(account.Name), "PRAC")) {
+		return errors.New("manual Practice tests require the selected PRAC account; use an automation profile for eligible Combine or Express Funded accounts")
 	}
 	if !p.PerTradeOnly && account.Balance <= a.Floor {
 		return errors.New("balance is at or below the verified loss floor")
@@ -272,9 +272,19 @@ func (e *Engine) account(ctx context.Context, id int64) (projectx.Account, error
 	}
 	for _, a := range accounts {
 		if a.ID == id {
-			if !a.CanTrade || a.Simulated == nil || !*a.Simulated || !finite(a.Balance) {
-				return a, errors.New("account cannot trade or simulated status is unverified")
+			if !a.CanTrade {
+				return a, errors.New("ProjectX reports canTrade=false for the selected account")
 			}
+			if a.Simulated == nil {
+				return a, errors.New("ProjectX did not verify the account simulated status")
+			}
+			if !*a.Simulated {
+				return a, errors.New("Live Funded accounts are not supported by Topstep's ProjectX API")
+			}
+			if !finite(a.Balance) {
+				return a, errors.New("account balance is unavailable")
+			}
+
 			return a, nil
 		}
 	}
