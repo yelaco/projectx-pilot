@@ -78,6 +78,11 @@ type Authorization struct {
 	AccountName       string
 }
 type Intent struct {
+	ExposureObserved bool `json:",omitempty"`
+	// Historical evidence only. Never substitutes for fresh reconciliation or authorizes mutation.
+	VerifiedPosition   *projectx.Position `json:",omitempty"`
+	VerifiedAt         time.Time          `json:",omitempty"`
+	AttentionRequired  bool               `json:",omitempty"`
 	Timing             Timing
 	HaltReason         string           `json:",omitempty"`
 	HaltOrders         []projectx.Order `json:",omitempty"`

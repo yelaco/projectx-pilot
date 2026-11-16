@@ -542,7 +542,21 @@ func TestProtectiveFailureDoesNotFlattenAnotherAccount(t *testing.T) {
 	g.orders[1] = nil
 	g.mu.Unlock()
 	f.WakeAccount(1)
-	waitFor(t, func() bool { g.mu.Lock(); defer g.mu.Unlock(); return g.closed[1] == 1 })
+	waitFor(t, func() bool {
+		views, _ := f.Snapshot()
+		for _, v := range views {
+			if v.AccountID == 1 && len(v.Status.Intents) > 0 && v.Status.Intents[0].AttentionRequired {
+				return true
+			}
+		}
+		return false
+	})
+	g.mu.Lock()
+	if g.closed[1] != 0 {
+		g.mu.Unlock()
+		t.Fatal("attention automatically closed position")
+	}
+	g.mu.Unlock()
 	g.mu.Lock()
 	otherClosed, otherOrders := g.closed[2], len(g.orders[2])
 	g.mu.Unlock()

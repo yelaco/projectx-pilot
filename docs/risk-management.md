@@ -6,7 +6,7 @@ Per-contract planned risk = stop ticks × authoritative tick value + estimated r
 
 A per-trade-only policy does **not** require a manual account floor and does **not** calculate or enforce Topstep MLL, liquidation distance, a cumulative daily loss limit or a trade-count limit. No artificial floor is inferred from account balance. The broker/platform still enforces its own restrictions; `canTrade=false` blocks entries. This is an explicit reduction in bot-level risk controls requested by the operator, not automatic MLL discovery.
 
-Every entry requires a fresh eligible simulated Practice/Combine/Express Funded account for automation (PRAC only for manual tests), verified session, authoritative contract metadata, current quote, valid stop/target, fee/slippage reserves, local Start/arming and a flat account without working orders. One active execution per account, durable intent/signal claims and protection checks remain mandatory. No adding to positions, averaging down, martingale, unprotected entry is implemented. Multi-account execution applies this policy independently to every target. Scheduled flattening and emergency protection failure handling remain active.
+Every entry requires a fresh eligible simulated Practice/Combine/Express Funded account for automation (PRAC only for manual tests), verified session, authoritative contract metadata, current quote, valid stop/target, fee/slippage reserves, local Start/arming and a flat account without working orders. One active execution per account, durable intent/signal claims and protection checks remain mandatory. No adding to positions, averaging down, martingale, unprotected entry is implemented. Multi-account execution applies this policy independently to every target. Schedule reminders and attention-only protection failure reports remain active; neither closes positions.
 
 ## Existing profiles and recovery
 
@@ -29,3 +29,7 @@ A Trade Manager may route to up to 20 explicit accounts. The planned risk ceilin
 ## Trade Manager trading windows
 
 A policy also owns its recurring weekday entry/flatten schedule in America/Chicago. It applies to automatic entries and narrows manual Practice authorization. The default is 17:00 start, 15:00 last entry and 15:05 flatten; configured earlier windows cover products with earlier closes or pauses. Holiday caps cannot widen a manager window. A schedule is operating configuration, not product availability data or permission to bypass an unknown holiday year. Schedule changes require renewed profile setup scope and never modify an existing trade's captured policy/window.
+
+## Existing-position policy
+
+Risk sizing and entry eligibility checks remain mandatory. Once exposure exists, daily-loss/floor violations, missing accounting data, protection discrepancies and scheduled cutoffs only pause/report; automatic exits are disabled. Legacy stored limits are not enforced liquidation/floor protection. Only explicit authenticated local emergency Flatten may close exposure; the broker’s SL/TP remains independent. `flatten` in stored schedules denotes an exit reminder.

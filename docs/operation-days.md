@@ -31,7 +31,7 @@ Saving requires authenticated same-origin CSRF-protected POST and pauses entries
 Review the policy and use the existing explicit Start again. The bot keeps
 monitoring positions; pause or an operation-day block requests cancellation of
 entry remainders, while filled exposure retains Auto OCO/risk management and
-scheduled flattening. These restrictions also gate manual Practice entry tickets
+scheduled exit reminders. These restrictions also gate manual Practice entry tickets
 and are rechecked at submission. Blocked alerts are consumed, never delayed until
 an enabled day. The independent fixed 30-minute limit lifetime remains unchanged.
 

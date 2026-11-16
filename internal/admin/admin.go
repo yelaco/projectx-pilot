@@ -16,6 +16,7 @@ import (
 
 	"github.com/yelaco/projectx-pilot/internal/access"
 	"github.com/yelaco/projectx-pilot/internal/app"
+	"github.com/yelaco/projectx-pilot/internal/attention"
 	"github.com/yelaco/projectx-pilot/internal/config"
 	"github.com/yelaco/projectx-pilot/internal/execution"
 	"github.com/yelaco/projectx-pilot/internal/fleet"
@@ -45,6 +46,7 @@ type Update struct {
 	ClearCredentials bool
 }
 type Manager struct {
+	notifications               *attention.Discord
 	userHub                     *realtime.UserHub
 	fleet                       *fleet.Fleet
 	profileSetups               map[string]fleet.Plan
@@ -156,6 +158,9 @@ func Open(c config.Config, configPath, stateDir string) (*Manager, string, error
 		return nil, "", err
 	}
 	m.access = users
+	if err := m.openAttention(); err != nil {
+		return nil, "", err
+	}
 	if err := m.openExecution(); err != nil {
 		return nil, "", err
 	}

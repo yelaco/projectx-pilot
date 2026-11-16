@@ -70,7 +70,7 @@ func (m *Manager) openExecution() error {
 		store.Close()
 		return err
 	}
-	engine, err := execution.New(storage.ScopedExecution{Inbox: store, Manual: true}, m.executionFactory(), executionAudit(audit))
+	engine, err := execution.New(storage.ScopedExecution{Inbox: store, Manual: true}, m.executionFactory(), m.executionAudit(audit))
 	if err != nil {
 		store.Close()
 		return err
@@ -360,7 +360,7 @@ func (m *Manager) AcquireExecutionLease() error {
 		f.Close()
 		return err
 	}
-	engine, err := execution.New(storage.ScopedExecution{Inbox: m.executionStore, Manual: true}, m.executionFactory(), executionAudit(audit))
+	engine, err := execution.New(storage.ScopedExecution{Inbox: m.executionStore, Manual: true}, m.executionFactory(), m.executionAudit(audit))
 	if err != nil {
 		f.Close()
 		return err
@@ -398,6 +398,20 @@ func (m *Manager) ReviewOneWayOCOLock(ctx context.Context, actor, password, inte
 	reviewCtx, cancel := context.WithTimeout(ctx, 25*time.Second)
 	defer cancel()
 	return m.executor.ReviewOneWayOCOLock(reviewCtx, m.executionConfig.AccountID, intentID)
+}
+
+func (m *Manager) ReviewStaleQuoteLock(ctx context.Context, actor, password, intentID string) error {
+	if err := m.reauthorize(actor, password); err != nil {
+		return err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.executionConfig.AccountID <= 0 {
+		return errors.New("select the Practice execution account first")
+	}
+	reviewCtx, cancel := context.WithTimeout(ctx, 25*time.Second)
+	defer cancel()
+	return m.executor.ReviewStaleQuoteLock(reviewCtx, m.executionConfig.AccountID, intentID)
 }
 
 // ExecutionLockInfo reports the application's durable lock, never firm permission.

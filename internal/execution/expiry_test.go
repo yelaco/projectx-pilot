@@ -63,13 +63,13 @@ func TestLimitExpiresThirtyMinutesAfterSignal(t *testing.T) {
 				t.Fatal(err)
 			}
 			want := 1
-			if mode == "filled" {
+			if mode == "filled" || mode == "partial" {
 				want = 0
 			}
 			if api.cancels != want || api.closes != 0 {
 				t.Fatal("incorrect expiry mutation", api.cancels, api.closes)
 			}
-			if mode == "partial" && (len(api.positions) != 1 || len(api.orders) != 2) {
+			if mode == "partial" && (len(api.positions) != 1 || len(api.orders) != 3) {
 				t.Fatal("expiry removed filled exposure or brackets")
 			}
 			if err = e.reconcile(context.Background(), i); err != nil {

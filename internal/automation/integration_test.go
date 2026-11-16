@@ -353,7 +353,7 @@ func TestMissingProtectionStopsContinuousRun(t *testing.T) {
 	deadline := time.Now().Add(time.Second)
 	for {
 		s := f.engine.Status()
-		if !s.RunRequested && len(s.Intents) > 0 && s.Intents[0].EmergencyAttempted {
+		if !s.RunRequested && len(s.Intents) > 0 && s.Intents[0].AttentionRequired && !s.Intents[0].EmergencyAttempted {
 			break
 		}
 		if time.Now().After(deadline) {

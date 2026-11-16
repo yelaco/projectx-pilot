@@ -6,7 +6,7 @@
 - Verify API behavior against official documentation; record uncertainty and fail closed.
 - Accept verified one-way or reciprocal OCO sibling links; never infer linkage from prices alone. Preserve the first management trigger before emergency progress overwrites the display.
 - Local repair of the legacy reciprocal-only OCO false alarm requires explicit password-confirmed review, matching closed one-contract history, two fresh flat/no-order observations, and an atomic scoped audit. Never clear daily locks/uncertain intents, arm, or replay as part of repair.
-- Never retry ambiguous order placement. Missing protection blocks entries and invokes the documented fail-safe.
+- Never retry ambiguous order placement. Missing protection blocks entries and invokes the documented attention-only fail-safe; never automatically close exposure or cancel protective orders.
 - A restart or reconnect does not establish flatness. Session/holiday uncertainty blocks execution. Per-trade-only policies intentionally do not calculate or enforce MLL; never represent this as verified floor protection.
 - Keep credentials, tokens, response bodies, and signal payloads out of logs.
 - Use context cancellation, bounded I/O, UTC timestamps and America/Chicago session rules.
@@ -27,4 +27,7 @@
 
 - Instrument scope belongs to each automation profile and its pinned contract. Do not restore a global instrument allowlist. Ignore legacy allowed_instruments YAML; manual Practice contracts must come from active authoritative discovery. Calendar/risk/protection checks remain mandatory.
 
-- Trade Managers own recurring Chicago start/last-entry/flatten schedules. Do not use ticker names as calendar permissions. Intersect manager windows with verified authorization and reviewed holiday caps; never widen them or infer an unknown year's holidays. Schedule edits pause affected profiles and preserve existing intents' captured windows.
+- Trade Managers own recurring Chicago start/last-entry/exit-reminder schedules (legacy field name: flatten). Reaching the exit reminder pauses entries and reports attention; it never automatically flattens. Do not use ticker names as calendar permissions. Intersect manager windows with verified authorization and reviewed holiday caps; never widen them or infer an unknown year's holidays. Schedule edits pause affected profiles and preserve existing intents' captured windows.
+
+- Established positions are operator-controlled. Persist last verified exposure as historical evidence across restart; never treat it as fresh flatness or permission to trade. Only an explicit authenticated local emergency Flatten action can close positions or cancel protective orders. Monitoring faults, protection mismatches, risk thresholds, clocks, news and scheduled reminders only pause/report; broker SL/TP remains untouched. Automatic cancellation is limited to wholly unfilled entry parents with no observed or previously verified exposure.
+- Optional Discord webhooks carry sanitized outbound attention reports only, are disabled by default, use private credentials and bounded nonblocking delivery, and never grant execution authority.

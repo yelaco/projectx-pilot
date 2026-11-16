@@ -66,6 +66,9 @@ func New(store Store, factory Factory, audit ...func(string, string)) (*Engine, 
 		if json.Unmarshal([]byte(r.Payload), &i) != nil || i.ID != r.ID || strconv.FormatInt(i.AccountID, 10) != r.Account || i.State != r.State || i.Session != r.Session {
 			return nil, errors.New("invalid execution recovery record")
 		}
+		if i.VerifiedPosition != nil || len(i.ObservedPositions) > 0 {
+			i.ExposureObserved = true
+		}
 		e.intents = append(e.intents, i)
 	}
 	return e, nil
@@ -125,6 +128,10 @@ func (e *Engine) snapshotLocked() Status {
 	}
 	for n := range s.Intents {
 		s.Intents[n].Policy = s.Intents[n].Policy.Clone()
+		if s.Intents[n].VerifiedPosition != nil {
+			copy := *s.Intents[n].VerifiedPosition
+			s.Intents[n].VerifiedPosition = &copy
+		}
 	}
 	if len(s.Intents) > 30 {
 		s.Intents = s.Intents[:30]
@@ -145,13 +152,17 @@ func (e *Engine) persist(i *Intent) error {
 	if err != nil {
 		e.disarm()
 		e.message = "execution persistence failed; manage account in TopstepX"
+		i.AttentionRequired = true
+		if e.audit != nil {
+			e.audit("ERROR", fmt.Sprintf("Account #%d: execution persistence failed; position unchanged; review account locally", i.AccountID))
+		}
 	}
 	if err == nil && e.audit != nil && e.lastAudit[i.ID] != i.State+":"+i.Message {
 		level := "INFO"
-		if i.State == "uncertain" || i.State == "protective-failure" {
+		if i.AttentionRequired || i.State == "uncertain" || i.State == "protective-failure" {
 			level = "ERROR"
 		}
-		e.audit(level, "Order lifecycle: "+i.State+". "+i.Message)
+		e.audit(level, fmt.Sprintf("Account #%d: Order lifecycle: %s. %s", i.AccountID, i.State, i.Message))
 		e.lastAudit[i.ID] = i.State + ":" + i.Message
 	}
 	e.publishLocked()

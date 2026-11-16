@@ -126,13 +126,23 @@ func (s *Inbox) ExecutionLock(account, session string) (string, error) {
 // ResolveOneWayOCOLock atomically records a scoped repair and removes only the
 // legacy checker lock. No execution row, signal claim or other lock is changed.
 func (s *Inbox) ResolveOneWayOCOLock(account, session, intent, expected string) error {
+	return s.resolveReviewedLock(account, session, intent, expected, "protective orders missing, pending or inconsistent")
+}
+
+// ResolveStaleQuoteLock atomically audits and removes only the exact reviewed
+// stale-quote lock, retaining execution history, claims and other account locks.
+func (s *Inbox) ResolveStaleQuoteLock(account, session, intent, expected string) error {
+	return s.resolveReviewedLock(account, session, intent, expected, "market data stale while managing exposure")
+}
+
+func (s *Inbox) resolveReviewedLock(account, session, intent, expected, allowed string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {
 		return errors.New("execution store closed")
 	}
-	if expected != "protective orders missing, pending or inconsistent" {
-		return errors.New("only the legacy OCO checker lock can be reviewed")
+	if expected != allowed {
+		return errors.New("lock reason does not match this scoped review")
 	}
 	if err := s.executionSchema(); err != nil {
 		return err
@@ -150,7 +160,7 @@ func (s *Inbox) ResolveOneWayOCOLock(account, session, intent, expected string) 
 	if C.sqlite3_changes(s.db) != 1 {
 		return errors.New("lock changed, execution unresolved, or scoped closed intent missing; no lock was cleared")
 	}
-	if err := s.write(`INSERT INTO execution_recoveries(intent,account,session,reason,at) VALUES(?,?,?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now'))`, intent, account, session, "one-way OCO historical verification and two fresh flat observations"); err != nil {
+	if err := s.write(`INSERT INTO execution_recoveries(intent,account,session,reason,at) VALUES(?,?,?,?,strftime('%Y-%m-%dT%H:%M:%fZ','now'))`, intent, account, session, expected+": historical verification and two fresh flat observations"); err != nil {
 		return err
 	}
 	return s.exec("COMMIT")

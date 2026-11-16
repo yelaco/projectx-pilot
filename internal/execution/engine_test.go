@@ -270,7 +270,7 @@ func protectedOrders(i *Intent, size int) []projectx.Order {
 		{ID: target, ParentOrderID: &parent, LinkedOrderID: &stop, ContractID: "mnq", Side: 1, Type: 1, Status: 1, Size: size, LimitPrice: &tp},
 	}
 }
-func TestPartialFillProtectionAndMissingStopFailSafe(t *testing.T) {
+func TestPartialFillMissingStopPausesWithoutFlatten(t *testing.T) {
 	e, api, _, store, c, p, a, s, _ := fixture(t)
 	if err := e.Arm(context.Background(), c, p, a); err != nil {
 		t.Fatal(err)
@@ -297,8 +297,8 @@ func TestPartialFillProtectionAndMissingStopFailSafe(t *testing.T) {
 	if err = e.reconcile(context.Background(), i); err != nil {
 		t.Fatal(err)
 	}
-	if api.closes != 1 || !i.EmergencyAttempted || e.Status().Armed {
-		t.Fatal("missing protection did not flatten")
+	if api.closes != 0 || i.EmergencyAttempted || e.Status().Armed || !i.AttentionRequired {
+		t.Fatal("missing protection did not preserve position and pause")
 	}
 	if reason, err := store.ExecutionLock("42", i.Session); err != nil || reason == "" {
 		t.Fatal("lockout not persisted")
@@ -307,8 +307,8 @@ func TestPartialFillProtectionAndMissingStopFailSafe(t *testing.T) {
 	if err = e.reconcile(context.Background(), i); err != nil {
 		t.Fatal(err)
 	}
-	if api.closes != 1 {
-		t.Fatal("emergency repeated")
+	if api.closes != 0 {
+		t.Fatal("automatic reconciliation closed position")
 	}
 }
 func TestConnectionLossPausesAndPreservesIntent(t *testing.T) {
@@ -823,12 +823,12 @@ func TestOneWayOCOFillDoesNotTriggerEmergencyClose(t *testing.T) {
 	if err = e.reconcile(context.Background(), intent); err != nil {
 		t.Fatal(err)
 	}
-	if api.closes != 1 || intent.HaltReason == "" || len(intent.HaltOrders) != 1 {
-		t.Fatal("missing protection not captured/closed")
+	if api.closes != 0 || intent.EmergencyAttempted || !intent.AttentionRequired || intent.HaltReason == "" || len(intent.HaltOrders) != 1 {
+		t.Fatal("missing protection not captured without closing")
 	}
 	original := intent.HaltReason
 	if intent.Message == original {
-		t.Fatal("fixture did not advance emergency progress")
+		t.Fatal("fixture did not describe operator attention")
 	}
 	rows, err := store.Executions()
 	if err != nil || !strings.Contains(rows[0].Payload, original) {
@@ -877,8 +877,8 @@ func TestManagerScheduleCapsAuthorizationAndKeepsFrozenWindow(t *testing.T) {
 	if err = e.reconcile(context.Background(), &e.intents[0]); err != nil {
 		t.Fatal(err)
 	}
-	if !e.intents[0].EmergencyAttempted || e.intents[0].HaltKind != "session_close" {
-		t.Fatal("manager flatten cutoff not enforced")
+	if e.intents[0].EmergencyAttempted || api.closes != 0 || api.cancels != 1 {
+		t.Fatal("schedule should cancel only the unfilled entry")
 	}
 	if len(api.requests) != 1 {
 		t.Fatal("schedule change replayed placement")

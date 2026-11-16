@@ -2,9 +2,9 @@ package dashboard
 
 import (
 	"context"
+	"github.com/yelaco/projectx-pilot/internal/app"
 	"net/http/httptest"
 	"net/url"
-	"github.com/yelaco/projectx-pilot/internal/app"
 
 	"github.com/yelaco/projectx-pilot/internal/execution"
 	"github.com/yelaco/projectx-pilot/internal/risk"
@@ -27,7 +27,7 @@ func TestExecutionPageAndSecurity(t *testing.T) {
 	if m.ExecutionStatus().Armed || m.ExecutionConfig().Enabled {
 		t.Fatal("execution enabled by default")
 	}
-	for _, action := range []string{"/execution/review-oco-lock", "/execution/settings", "/execution/arm", "/execution/ticket", "/execution/submit", "/execution/flatten", "/execution/pause"} {
+	for _, action := range []string{"/execution/review-stale-quote-lock", "/execution/review-oco-lock", "/execution/settings", "/execution/arm", "/execution/ticket", "/execution/submit", "/execution/flatten", "/execution/pause"} {
 		r := httptest.NewRequest("POST", "http://127.0.0.1:8080"+action, strings.NewReader(url.Values{"csrf": {csrf}}.Encode()))
 		r.SetBasicAuth("local", password)
 		r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
@@ -170,5 +170,32 @@ func TestOCOLockReviewRequiresExplicitConfirmationAndReauthentication(t *testing
 	w = requestAs(h, "local", password, "POST", "/execution/review-oco-lock", fields)
 	if w.Code != 400 || !strings.Contains(w.Body.String(), "current administrator password required") {
 		t.Fatal("review bypassed reauthentication", w.Code)
+	}
+}
+
+func TestStaleQuoteLockReviewRequiresExplicitConfirmationAndReauthentication(t *testing.T) {
+	_, password, h := managementFixture(t)
+	csrf := formCSRF(t, requestAs(h, "local", password, "GET", "/execution", nil))
+	fields := url.Values{"csrf": {csrf}, "intent_id": {"old-order"}, "current_password": {password}}
+	w := requestAs(h, "local", password, "POST", "/execution/review-stale-quote-lock", fields)
+	if w.Code != 400 || !strings.Contains(w.Body.String(), "confirm review") {
+		t.Fatal("review confirmation missing", w.Code)
+	}
+	fields.Set("review_confirmed", "yes")
+	fields.Set("current_password", "wrong")
+	w = requestAs(h, "local", password, "POST", "/execution/review-stale-quote-lock", fields)
+	if w.Code != 400 || !strings.Contains(w.Body.String(), "current administrator password required") {
+		t.Fatal("review bypassed reauthentication", w.Code)
+	}
+}
+
+func TestStaleQuoteReviewVisibleInExecutionTemplate(t *testing.T) {
+	var body strings.Builder
+	v := view{CSRF: "test-csrf", StaleQuoteRecoveryCandidates: []execution.Intent{{ID: "closed-stale", OrderID: 77}}}
+	if err := page.ExecuteTemplate(&body, "execution", v); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(body.String(), `action="/execution/review-stale-quote-lock"`) || !strings.Contains(body.String(), "closed-stale") {
+		t.Fatal("stale-quote review form missing")
 	}
 }

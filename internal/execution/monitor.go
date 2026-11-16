@@ -43,11 +43,18 @@ func (e *Engine) Run(ctx context.Context) {
 		if i != nil {
 			monitorCtx, cancel := context.WithTimeout(ctx, 12*time.Second)
 			if err := e.connect(i.AccountID); err != nil {
+				e.disarm()
+				e.runRequested = false
 				e.message = "cannot connect for recovery; manage the pinned account in TopstepX"
+				i.AttentionRequired = true
+				i.Message = e.message
+				_ = e.persist(i)
 			} else {
 				e.quotes.Watch(ctx, i.Contract.ID)
 				if err := e.reconcile(monitorCtx, i); err != nil {
 					e.disarm()
+					e.runRequested = false
+					i.AttentionRequired = true
 					e.message = err.Error()
 					i.Message = e.message
 					_ = e.persist(i)
@@ -103,12 +110,15 @@ func (e *Engine) reconcile(ctx context.Context, i *Intent) error {
 	}
 	i.ObservedOrders = orders
 	i.ObservedPositions = positions
+	if len(positions) > 0 {
+		i.ExposureObserved = true
+	}
 	i.ObservedAt = e.now().UTC()
 	var parent *projectx.Order
 	for _, o := range history {
 		if o.CustomTag == i.Tag || i.OrderID != 0 && o.ID == i.OrderID {
 			if parent != nil && parent.ID != o.ID {
-				return e.fail(ctx, i, "duplicate parent orders detected")
+				return e.requireAttention(i, "duplicate parent orders detected")
 			}
 			v := o
 			parent = &v
@@ -121,9 +131,12 @@ func (e *Engine) reconcile(ctx context.Context, i *Intent) error {
 		return e.persist(i)
 	}
 	if parent.CustomTag != i.Tag || parent.ContractID != i.Contract.ID || parent.Size != i.Plan.Quantity || parent.Type != i.OrderType || parent.Side != side(i.Signal.Direction) {
-		return e.fail(ctx, i, "accepted order differs from durable intent")
+		return e.requireAttention(i, "accepted order differs from durable intent")
 	}
 	i.OrderID = parent.ID
+	if parent.FillVolume > 0 {
+		i.ExposureObserved = true
+	}
 	if i.EmergencyAttempted {
 		if len(positions) == 0 && len(orders) == 0 && (parent.Status == 2 || parent.Status == 3 || parent.Status == 4 || parent.Status == 5) {
 			if i.FlatSince.IsZero() {
@@ -140,11 +153,9 @@ func (e *Engine) reconcile(ctx context.Context, i *Intent) error {
 			i.State = "closed"
 			return e.persist(i)
 		}
+		i.AttentionRequired = true
 		e.lock(i, "emergency management not verified flat; use TopstepX immediately")
 		return e.persist(i)
-	}
-	if !e.now().Before(i.Window.Flatten) {
-		return e.failWithKind(ctx, i, "scheduled flatten cutoff reached", "session_close")
 	}
 	// Limit entries have a fixed lifetime measured from the original signal,
 	// independent of the incoming-alert freshness limit. Pause/window cutoffs
@@ -155,7 +166,7 @@ func (e *Engine) reconcile(ctx context.Context, i *Intent) error {
 	}
 	newsErr := e.newsAllowed(e.now(), i.Config.NewsFilter)
 	operationErr := e.operationAllowed(e.now(), i.Config.TradeManagerID)
-	if parent.FillVolume < parent.Size && (e.paused || operationErr != nil || newsErr != nil || !e.now().Before(i.Signal.Timestamp.Add(entryMaxAge)) || !e.now().Before(i.Window.LastEntry)) && parent.Status == 1 && !i.CancelAttempted {
+	if parent.FillVolume == 0 && len(positions) == 0 && i.VerifiedPosition == nil && !i.ExposureObserved && (e.paused || operationErr != nil || newsErr != nil || !e.now().Before(i.Signal.Timestamp.Add(entryMaxAge)) || !e.now().Before(i.Window.LastEntry)) && parent.Status == 1 && !i.CancelAttempted {
 		i.CancelAttempted = true
 		i.Message = "Entry cancellation requested: expiry, pause or session cutoff."
 		if operationErr != nil {
@@ -168,12 +179,12 @@ func (e *Engine) reconcile(ctx context.Context, i *Intent) error {
 			return err
 		}
 		if err = e.api.Cancel(ctx, parent.ID); err != nil {
-			return e.fail(ctx, i, "entry cancellation uncertain")
+			return e.requireAttention(i, "entry cancellation uncertain")
 		}
 		return nil
 	}
 	if len(positions) > 1 {
-		return e.fail(ctx, i, "unexpected concurrent account exposure")
+		return e.requireAttention(i, "unexpected concurrent account exposure")
 	}
 	if len(positions) == 0 {
 		// Flat observations are not assumed to mean a fill already closed. Require
@@ -201,17 +212,9 @@ func (e *Engine) reconcile(ctx context.Context, i *Intent) error {
 			if e.now().Sub(i.FlatSince) < 3*time.Second {
 				return nil
 			}
-			for _, o := range orders {
-				if o.ParentOrderID == nil || *o.ParentOrderID != parent.ID {
-					return e.fail(ctx, i, "unexpected working order on otherwise flat account")
-				}
-				if err = e.api.Cancel(ctx, o.ID); err != nil {
-					return e.fail(ctx, i, "orphan bracket cancellation uncertain")
-				}
-			}
 			if len(orders) > 0 {
-				return nil
-			} // verify cancellation on next reconciliation
+				return e.requireAttention(i, "flat observations with working orders; review and cancel orders locally if appropriate")
+			}
 			if parent.Status == 5 {
 				i.State = "rejected"
 			} else if parent.FillVolume == 0 {
@@ -232,16 +235,30 @@ func (e *Engine) reconcile(ctx context.Context, i *Intent) error {
 	i.FlatSince = time.Time{}
 	p := positions[0]
 	if p.ContractID != i.Contract.ID || p.Size > i.Plan.Quantity || p.Type != positionType(i.Signal.Direction) || p.Size > parent.FillVolume {
-		return e.fail(ctx, i, "position exposure differs from observed entry fills")
+		return e.requireAttention(i, "position exposure differs from observed entry fills")
 	}
 	if err = verifyProtection(*i, p, orders); err != nil {
-		return e.fail(ctx, i, err.Error())
+		return e.requireAttention(i, err.Error())
 	}
 	i.State = "protected"
 	if parent.FillVolume < parent.Size {
 		i.State = "partial"
 	}
+	i.AttentionRequired = false
 	i.Message = "Observed exposure has matching linked stop and target coverage."
+	verified := p
+	i.VerifiedPosition = &verified
+	i.VerifiedAt = e.now().UTC()
+	if err = e.persist(i); err != nil {
+		return err
+	}
+	if parent.Status == 1 && parent.FillVolume > 0 && parent.FillVolume < parent.Size && (e.paused || operationErr != nil || newsErr != nil || !e.now().Before(i.Signal.Timestamp.Add(entryMaxAge)) || !e.now().Before(i.Window.LastEntry)) {
+		return e.requireAttention(i, "entry restriction reached with a partial fill; review remaining entry locally")
+	}
+	if !e.now().Before(i.Window.Flatten) {
+		return e.requireAttentionWithKind(i, "scheduled exit reminder reached; position preserved for operator", "session_close")
+	}
+
 	account, err := e.account(ctx, i.AccountID)
 	if err != nil {
 		return errors.New("account eligibility unavailable; entries paused")
@@ -257,23 +274,31 @@ func (e *Engine) reconcile(ctx context.Context, i *Intent) error {
 	if !i.Policy.PerTradeOnly {
 		loss, err = sessionLoss(trades)
 		if err != nil {
-			return e.fail(ctx, i, "session costs or P&L cannot be verified")
+			return e.requireAttention(i, "session costs or P&L cannot be verified")
 		}
+	}
+	if i.Policy.PerTradeOnly {
+		return e.persist(i)
 	}
 	q, err := e.quotes.Get(i.Contract.ID)
 	if err != nil {
-		return e.fail(ctx, i, "market data stale while managing exposure")
+		e.disarm()
+		e.runRequested = false
+		e.runMessage = "Market data unavailable; entries paused. Restart locally after recovery."
+		i.AttentionRequired = true
+		i.Message = "Linked SL/TP verified. Market data unavailable; quote-based daily-loss and floor monitoring unavailable. Entries paused; protection monitoring continues."
+		return e.persist(i)
 	}
 	pnl := (q.Price - p.AveragePrice) / i.Contract.TickSize * i.Contract.TickValue * float64(p.Size)
 	if p.Type == 2 {
 		pnl = -pnl
 	}
 	if !i.Policy.PerTradeOnly && loss+math.Max(0, -pnl) >= i.Policy.MaxDailyLoss {
-		return e.failWithKind(ctx, i, "daily loss limit reached", "daily_limit")
+		return e.requireAttentionWithKind(i, "daily loss limit reached", "daily_limit")
 	}
 	if !i.Policy.PerTradeOnly && account.Balance+pnl-i.Floor <= i.Config.RoundTripCosts*float64(p.Size) {
 		i.HaltKind = "fault"
-		return e.fail(ctx, i, "liquidation buffer reached")
+		return e.requireAttention(i, "liquidation buffer reached")
 	}
 	return e.persist(i)
 }
@@ -370,37 +395,32 @@ func verifyProtection(i Intent, p projectx.Position, orders []projectx.Order) er
 	}
 	return nil
 }
-func (e *Engine) fail(ctx context.Context, i *Intent, why string) error {
-	return e.failWithKind(ctx, i, why, "fault")
+
+// requireAttention only records observations and pauses entries; it has no broker mutation path.
+func (e *Engine) requireAttention(i *Intent, why string) error {
+	return e.requireAttentionWithKind(i, why, "fault")
 }
-func (e *Engine) failWithKind(ctx context.Context, i *Intent, why, kind string) error {
+func (e *Engine) requireAttentionWithKind(i *Intent, why, kind string) error {
 	if i.HaltReason == "" {
 		i.HaltReason = why
 		i.HaltOrders = append([]projectx.Order(nil), i.ObservedOrders...)
 	}
 	i.HaltKind = kind
-	i.State = "protective-failure"
-	if i.HaltKind == "session_close" {
-		i.State = "flattening"
-	}
+	i.State = "attention-required"
+	i.AttentionRequired = true
+	e.runRequested = false
 	if i.HaltKind == "daily_limit" {
 		i.State = "risk-lockout"
 	}
 	e.lock(i, why)
-	if err := e.persist(i); err != nil {
-		return err
-	}
-	err := e.flatten(ctx, i)
-	if err != nil {
-		e.runRequested = false
-		e.runMessage = err.Error()
-	}
-	return err
+	i.Message = why + ". No automatic closing or protective-order changes requested; operator attention required."
+	return e.persist(i)
 }
 
-// flatten persists a one-attempt latch before sending any emergency mutations.
+// flattenOnOperatorRequest is called only by the explicit local Flatten action.
+// It persists a one-attempt latch before sending any emergency mutations.
 // Ambiguous close/cancel results are never replayed by the monitor.
-func (e *Engine) flatten(ctx context.Context, i *Intent) error {
+func (e *Engine) flattenOnOperatorRequest(ctx context.Context, i *Intent) error {
 	if i.EmergencyAttempted {
 		return errors.New("emergency already attempted; verify account in TopstepX")
 	}
@@ -462,7 +482,25 @@ func (e *Engine) Flatten(ctx context.Context) error {
 	if i == nil {
 		return errors.New("no bot-managed active execution; manage other positions in TopstepX")
 	}
-	return e.fail(ctx, i, "local emergency flatten requested")
+	e.runRequested = false
+	if i.HaltReason == "" {
+		i.HaltReason = "local emergency flatten requested"
+		i.HaltOrders = append([]projectx.Order(nil), i.ObservedOrders...)
+	}
+	i.HaltKind = "fault"
+	i.State = "flattening"
+	e.lock(i, "local emergency flatten requested")
+	if err := e.persist(i); err != nil {
+		return err
+	}
+	err := e.flattenOnOperatorRequest(ctx, i)
+	if err != nil {
+		i.AttentionRequired = true
+		i.Message = err.Error()
+		e.runMessage = i.Message
+		_ = e.persist(i)
+	}
+	return err
 }
 
 // ProjectX may expose a one-way OCO relationship (e.g. target -> stop).

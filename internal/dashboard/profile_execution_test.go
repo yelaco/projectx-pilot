@@ -105,7 +105,7 @@ func TestFleetControlsRequireLocalAuthorization(t *testing.T) {
 	h := AdminHandler(app.New(nil, 0), password, "127.0.0.1:8080", m)
 	page := requestAs(h, "local", password, "GET", "/runners", nil)
 	csrf := formCSRF(t, page)
-	for _, path := range []string{"/fleet/pause", "/fleet/resume", "/fleet/flatten", "/fleet/account-pause", "/fleet/account-flatten", "/fleet/review-oco"} {
+	for _, path := range []string{"/fleet/pause", "/fleet/resume", "/fleet/flatten", "/fleet/account-pause", "/fleet/account-flatten", "/fleet/review-oco", "/fleet/review-stale-quote"} {
 		values := url.Values{"csrf": {"invalid"}, "account_id": {"7"}}
 		if w := requestAs(h, "local", password, "POST", path, values); w.Code != 403 {
 			t.Fatal("CSRF bypass", path, w.Code)

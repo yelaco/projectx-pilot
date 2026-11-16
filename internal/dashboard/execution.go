@@ -12,7 +12,7 @@ import (
 
 func executionAction(path string) bool {
 	switch path {
-	case "/execution/review-oco-lock", "/execution/ticket", "/execution/settings", "/execution/arm", "/execution/pause", "/execution/preview", "/execution/submit", "/execution/flatten":
+	case "/execution/review-stale-quote-lock", "/execution/review-oco-lock", "/execution/ticket", "/execution/settings", "/execution/arm", "/execution/pause", "/execution/preview", "/execution/submit", "/execution/flatten":
 		return true
 	}
 	return false
@@ -25,6 +25,11 @@ func handleExecution(r *http.Request, m *admin.Manager, actor string) error {
 			return errors.New("confirm review of the known OCO checker false alarm")
 		}
 		return m.ReviewOneWayOCOLock(r.Context(), actor, password, r.PostForm.Get("intent_id"))
+	case "/execution/review-stale-quote-lock":
+		if r.PostForm.Get("review_confirmed") != "yes" {
+			return errors.New("confirm review of the stale-quote lock")
+		}
+		return m.ReviewStaleQuoteLock(r.Context(), actor, password, r.PostForm.Get("intent_id"))
 	case "/execution/ticket":
 		quantity, err := strconv.Atoi(r.PostForm.Get("quantity"))
 		if err != nil {

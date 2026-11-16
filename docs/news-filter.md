@@ -59,10 +59,10 @@ last error and a protected Refresh news feed button. Refresh outcomes also appea
 in Activity; raw feed bodies and events are not logged.
 
 The gate applies before manual/automatic entry and again at submission. Blocked
-alerts are consumed, never queued for later. Working entry remainders cancel when
+alerts are consumed, never queued for later. Wholly unfilled entries with no current or previously verified exposure cancel when
 the monitor observes a known news-event block. Missing/stale coverage alone does
 not cancel pending entries. Filled exposure retains
-Auto OCO, risk monitoring and scheduled flattening; a feed outage alone does not
+broker Auto OCO and attention-only risk/schedule monitoring; a feed outage alone does not
 flatten it. The fixed 30-minute limit lifetime and earlier cutoffs remain active.
 News never overrides general or per-Trade Manager manual restrictions.
 

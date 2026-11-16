@@ -65,7 +65,7 @@ The first successful reconciliation at/after that deadline requests cancellation
 of the unfilled remainder and verifies the resulting order/account state. A
 partially filled position keeps its protective brackets. A fully filled position
 is not closed merely because 30 minutes elapsed. Pause, session entry cutoff and
-mandatory flattening can apply earlier; risk/protection fail-safes remain active.
+exit reminders can apply earlier; risk/protection reports pause entries without automatically closing positions.
 The deadline is derived from the persisted original timestamp across restart.
 
 This is local cancellation, not a broker-side expiry parameter: the laptop and

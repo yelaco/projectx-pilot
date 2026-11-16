@@ -740,3 +740,12 @@ func (f *Fleet) ReviewOCOLock(ctx context.Context, account int64, intent string)
 	}
 	return r.engine.ReviewOneWayOCOLock(ctx, account, intent)
 }
+func (f *Fleet) ReviewStaleQuoteLock(ctx context.Context, account int64, intent string) error {
+	f.mu.Lock()
+	r := f.accounts[account]
+	f.mu.Unlock()
+	if r == nil {
+		return errors.New("automatic account runner not found")
+	}
+	return r.engine.ReviewStaleQuoteLock(ctx, account, intent)
+}

@@ -3,8 +3,8 @@ package storage
 import (
 	"errors"
 	"fmt"
-	"path/filepath"
 	"github.com/yelaco/projectx-pilot/internal/signal"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -177,6 +177,64 @@ func TestOCOReviewClearsOnlyMatchingClosedFaultAndKeepsClaims(t *testing.T) {
 		t.Fatal("execution history changed")
 	}
 	if err = s.ResolveOneWayOCOLock("42", row.Session, row.ID, reason); err == nil {
+		t.Fatal("review replayed")
+	}
+}
+
+func TestStaleQuoteReviewClearsOnlyMatchingClosedFaultAndKeepsClaims(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "execution.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+	const reason = "market data stale while managing exposure"
+	row := ExecRow{ID: "old-intent", Account: "42", Session: "2026-11-13", State: "closed", Payload: "original-history"}
+	if err = s.ReserveExecution(row); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.LockExecution("42", row.Session, reason); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.LockExecution("43", row.Session, "daily loss limit reached"); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.ResolveStaleQuoteLock("43", row.Session, row.ID, reason); err == nil {
+		t.Fatal("wrong account unlocked")
+	}
+	if err = s.ResolveStaleQuoteLock("42", row.Session, row.ID, "daily loss limit reached"); err == nil {
+		t.Fatal("loss lock can be reviewed")
+	}
+	active := ExecRow{ID: "active", Account: "42", Session: row.Session, State: "uncertain", Payload: "unresolved"}
+	if err = s.ReserveExecution(active); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.ResolveStaleQuoteLock("42", row.Session, row.ID, reason); err == nil {
+		t.Fatal("unlocked over an unresolved intent on the same account")
+	}
+	if got, _ := s.ExecutionLock("42", row.Session); got != reason {
+		t.Fatal("failed review erased lock")
+	}
+	active.State = "rejected"
+	if err = s.SaveExecution(active); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.ResolveStaleQuoteLock("42", row.Session, row.ID, reason); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := s.ExecutionLock("42", row.Session); got != "" {
+		t.Fatal("review did not clear exact lock")
+	}
+	if got, _ := s.ExecutionLock("43", row.Session); got != "daily loss limit reached" {
+		t.Fatal("another account's loss lock changed")
+	}
+	if err = s.ReserveExecution(row); err == nil {
+		t.Fatal("review erased idempotency claim")
+	}
+	rows, err := s.Executions()
+	if err != nil || len(rows) != 2 || rows[1].Payload != "original-history" {
+		t.Fatal("execution history changed")
+	}
+	if err = s.ResolveStaleQuoteLock("42", row.Session, row.ID, reason); err == nil {
 		t.Fatal("review replayed")
 	}
 }

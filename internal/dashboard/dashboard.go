@@ -21,6 +21,7 @@ import (
 	"github.com/yelaco/projectx-pilot/internal/access"
 	"github.com/yelaco/projectx-pilot/internal/admin"
 	"github.com/yelaco/projectx-pilot/internal/app"
+	"github.com/yelaco/projectx-pilot/internal/attention"
 	"github.com/yelaco/projectx-pilot/internal/execution"
 	"github.com/yelaco/projectx-pilot/internal/fleet"
 	"github.com/yelaco/projectx-pilot/internal/ingress"
@@ -43,6 +44,7 @@ var stylesheet string
 var page = template.Must(template.New("admin").ParseFS(templateFiles, "admin.html", "pages/*.html"))
 
 type view struct {
+	Attention                                                                attention.Status
 	ManagerSchedule                                                          session.Schedule
 	UserData                                                                 realtime.UserStatus
 	ProfileTargets                                                           []int64
@@ -56,6 +58,7 @@ type view struct {
 	OperationWeek                                                            admin.OperationWeek
 	LocalSessionLock                                                         string
 	OCORecoveryCandidates                                                    []execution.Intent
+	StaleQuoteRecoveryCandidates                                             []execution.Intent
 	ManualTicketContracts                                                    []projectx.Contract
 	PerTradeOnly                                                             bool
 	ProfileResults                                                           []storage.AutomationReceipt
@@ -160,6 +163,7 @@ func handler(s *app.Service, token string, m *admin.Manager) http.Handler {
 			v := view{ManagerSchedule: session.DefaultSchedule(), Current: current.Info, Page: name, Nav: nav, Title: title, Subtitle: subtitle, State: s.Snapshot(), Editable: m != nil, CSRF: csrf, Notice: notice, Error: message}
 			if m != nil {
 				v.Settings = m.Settings()
+				v.Attention = m.AttentionStatus()
 				v.NewsStatus = m.NewsStatus()
 				if name == "operation-days" {
 					week := r.URL.Query().Get("week")
@@ -242,6 +246,9 @@ func handler(s *app.Service, token string, m *admin.Manager) http.Handler {
 					v.DeliveryJobs[j.DeliveryID] = append(v.DeliveryJobs[j.DeliveryID], j)
 				}
 				for _, intent := range v.Execution.Intents {
+					if intent.AccountID == v.ExecutionConfig.AccountID && intent.State == "closed" && intent.HaltReason == "market data stale while managing exposure" && intent.Session == lockSession && lockReason == intent.HaltReason {
+						v.StaleQuoteRecoveryCandidates = append(v.StaleQuoteRecoveryCandidates, intent)
+					}
 					if intent.AccountID == v.ExecutionConfig.AccountID && intent.State == "closed" && intent.HaltKind == "fault" && intent.EmergencyAttempted && intent.Plan.Quantity == 1 && intent.Session == lockSession && lockReason == "protective orders missing, pending or inconsistent" {
 						v.OCORecoveryCandidates = append(v.OCORecoveryCandidates, intent)
 					}
@@ -428,7 +435,7 @@ func handler(s *app.Service, token string, m *admin.Manager) http.Handler {
 			return
 		}
 		if r.Method == http.MethodPost {
-			if m == nil || (!strings.HasPrefix(r.URL.Path, "/fleet/") && r.URL.Path != "/news-refresh" && r.URL.Path != "/operation-days" && r.URL.Path != "/settings" && r.URL.Path != "/refresh" && r.URL.Path != "/account-permission" && r.URL.Path != "/automation" && r.URL.Path != "/automation-delete" && r.URL.Path != "/signal-import" && r.URL.Path != "/signal-review" && r.URL.Path != "/delivery-import" && r.URL.Path != "/delivery-reject" && r.URL.Path != "/ingress" && r.URL.Path != "/mapping" && r.URL.Path != "/admin-access" && r.URL.Path != "/trade-manager" && r.URL.Path != "/trade-manager-delete" && r.URL.Path != "/automation-execution" && !profileExecutionAction(r.URL.Path) && !executionAction(r.URL.Path)) {
+			if m == nil || (!strings.HasPrefix(r.URL.Path, "/fleet/") && r.URL.Path != "/news-refresh" && r.URL.Path != "/operation-days" && r.URL.Path != "/settings" && r.URL.Path != "/attention-settings" && r.URL.Path != "/refresh" && r.URL.Path != "/account-permission" && r.URL.Path != "/automation" && r.URL.Path != "/automation-delete" && r.URL.Path != "/signal-import" && r.URL.Path != "/signal-review" && r.URL.Path != "/delivery-import" && r.URL.Path != "/delivery-reject" && r.URL.Path != "/ingress" && r.URL.Path != "/mapping" && r.URL.Path != "/admin-access" && r.URL.Path != "/trade-manager" && r.URL.Path != "/trade-manager-delete" && r.URL.Path != "/automation-execution" && !profileExecutionAction(r.URL.Path) && !executionAction(r.URL.Path)) {
 				http.Error(w, "method not allowed", 405)
 				return
 			}
@@ -657,6 +664,13 @@ func handler(s *app.Service, token string, m *admin.Manager) http.Handler {
 					} else {
 						err = m.ReviewRunnerOCOLock(r.Context(), current.ID, r.PostForm.Get("current_password"), account, r.PostForm.Get("intent_id"))
 					}
+				case "/fleet/review-stale-quote":
+					account, e := strconv.ParseInt(r.PostForm.Get("account_id"), 10, 64)
+					if e != nil || account <= 0 {
+						err = errors.New("invalid runner account")
+					} else {
+						err = m.ReviewRunnerStaleQuoteLock(r.Context(), current.ID, r.PostForm.Get("current_password"), account, r.PostForm.Get("intent_id"))
+					}
 				case "/fleet/account-pause", "/fleet/account-flatten":
 					account, e := strconv.ParseInt(r.PostForm.Get("account_id"), 10, 64)
 					if e != nil || account <= 0 {
@@ -695,6 +709,15 @@ func handler(s *app.Service, token string, m *admin.Manager) http.Handler {
 				}
 				m.Note("INFO", "operations", "Operation days updated; new entries paused.")
 				http.Redirect(w, r, "/operation-days?week="+r.PostForm.Get("week"), http.StatusSeeOther)
+				return
+			}
+			if r.URL.Path == "/attention-settings" {
+				err := m.SaveAttention(current.ID, r.PostForm.Get("current_password"), r.PostForm.Get("enabled") == "yes", r.PostForm.Get("discord_webhook"), r.PostForm.Get("clear_webhook") == "yes")
+				if err != nil {
+					render(w, 400, "", err.Error())
+					return
+				}
+				http.Redirect(w, r, "/settings", http.StatusSeeOther)
 				return
 			}
 			account, err := strconv.ParseInt(r.PostForm.Get("account_id"), 10, 64)

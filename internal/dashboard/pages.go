@@ -60,7 +60,7 @@ func actionPage(path, id string) string {
 		return "/execution"
 	}
 	switch path {
-	case "/fleet/review-oco", "/fleet/pause", "/fleet/resume", "/fleet/flatten", "/fleet/account-pause", "/fleet/account-flatten":
+	case "/fleet/review-stale-quote", "/fleet/review-oco", "/fleet/pause", "/fleet/resume", "/fleet/flatten", "/fleet/account-pause", "/fleet/account-flatten":
 		return "/runners"
 	case "/operation-days", "/news-refresh":
 		return "/operation-days"
@@ -92,7 +92,7 @@ func actionPage(path, id string) string {
 		return "/settings/webhooks"
 	case "/admin-access":
 		return "/settings/access"
-	case "/settings":
+	case "/settings", "/attention-settings":
 		return "/settings"
 	default:
 		return "/"

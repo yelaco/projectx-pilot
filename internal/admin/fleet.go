@@ -64,7 +64,7 @@ func (m *Manager) initFleet() error {
 	if err != nil {
 		return err
 	}
-	m.fleet, err = fleet.New(m.executionStore, m.executionFactory(), m.news, m.now, executionAudit(audit))
+	m.fleet, err = fleet.New(m.executionStore, m.executionFactory(), m.news, m.now, m.executionAudit(audit))
 	if err != nil {
 		return err
 	}
@@ -476,6 +476,10 @@ func (m *Manager) processFleet(ctx context.Context) error {
 // runtime coordinates manual recovery and all account-specific automatic monitors.
 func (m *Manager) runExecutionFleet(ctx context.Context) {
 	var wg sync.WaitGroup
+	if m.notifications != nil {
+		wg.Add(1)
+		go func() { defer wg.Done(); m.notifications.Run(ctx) }()
+	}
 	wg.Add(1)
 	go func() { defer wg.Done(); m.fleet.Run(ctx) }()
 	m.executor.Run(ctx)
@@ -558,6 +562,13 @@ func (m *Manager) ReviewRunnerOCOLock(ctx context.Context, actor, password strin
 		return err
 	}
 	return m.fleet.ReviewOCOLock(ctx, account, intent)
+}
+
+func (m *Manager) ReviewRunnerStaleQuoteLock(ctx context.Context, actor, password string, account int64, intent string) error {
+	if err := m.reauthorize(actor, password); err != nil {
+		return err
+	}
+	return m.fleet.ReviewStaleQuoteLock(ctx, account, intent)
 }
 
 func (m *Manager) ProfileFloor(id string) float64 {
