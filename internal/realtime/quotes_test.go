@@ -59,3 +59,18 @@ func TestMarketHubIgnoresOtherContractsAndInvalidPrice(t *testing.T) {
 		t.Fatal(quotes, err)
 	}
 }
+
+func TestInspectReportsCachedQuoteAgeWithoutChangingFeed(t *testing.T) {
+	f := New(nil)
+	f.contract = "mnq"
+	f.state = "connected"
+	f.quote = Quote{Price: 20000, At: time.Now().Add(-time.Minute)}
+	before := f.quote
+	state := f.Inspect("mnq")
+	if state.Fresh || state.At != before.At || state.Contract != "mnq" || f.quote != before || f.done != nil {
+		t.Fatal("diagnostic inspection changed/warmed feed or accepted stale quote")
+	}
+	if state = f.Inspect("other"); state.Fresh || !state.At.IsZero() {
+		t.Fatal("wrong contract inherited another feed's quote")
+	}
+}

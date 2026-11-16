@@ -11,6 +11,8 @@ import (
 
 func pageInfo(path string) (name, nav, title, subtitle string) {
 	switch path {
+	case "/system-health":
+		return "system-health", "system-health", "System health", "Current internal state, account blockers and observation freshness — without changing execution."
 	case "/runners":
 		return "runners", "runners", "Execution runners", "Account ownership, global controls, and signal-to-acceptance results."
 	case "/operation-days":

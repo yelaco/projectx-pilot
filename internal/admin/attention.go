@@ -20,6 +20,9 @@ func (m *Manager) openAttention() error {
 	if err != nil {
 		return err
 	}
+	if err = m.notifications.SetLocalDashboard(m.c.DashboardListen); err != nil {
+		return err
+	}
 	m.tradingReports, err = attention.OpenDaily(filepath.Join(filepath.Dir(m.credentialsPath), "trading-discord.json"))
 	return err
 }

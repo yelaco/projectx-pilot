@@ -302,3 +302,21 @@ func (p *protocol) consume(data []byte) ([]Quote, bool, error) {
 	}
 	return quotes, p.handshake, nil
 }
+
+// QuoteStatus is diagnostic cache state, never authorization to place an order.
+type QuoteStatus struct {
+	Contract string
+	State    string
+	At       time.Time
+	Fresh    bool
+}
+
+func (f *Feed) Inspect(contract string) QuoteStatus {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.contract != contract {
+		return QuoteStatus{Contract: contract, State: "Subscription not selected"}
+	}
+	_, err := f.getLocked(contract)
+	return QuoteStatus{Contract: contract, State: f.state, At: f.quote.At, Fresh: err == nil}
+}

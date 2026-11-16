@@ -30,6 +30,7 @@ type ExecutionMonitor struct {
 	ObservedAt               time.Time
 }
 type Monitor struct {
+	Health                       SystemHealth
 	TargetJobs                   []storage.TargetJob
 	UserData                     realtime.UserStatus
 	Runners                      []fleet.View
@@ -156,6 +157,7 @@ func (m *Manager) Monitor(ctx context.Context) Monitor {
 		v.ReceiverListening = response.StatusCode == 200
 		response.Body.Close()
 	}
+	v.Health = buildSystemHealth(v, m.healthMeta(), m.now())
 	return v
 }
 

@@ -236,6 +236,7 @@ func (f *Fleet) Snapshot() ([]View, bool) {
 	out := []View{}
 	for _, r := range f.accounts {
 		s, _ := r.status.Load().(execution.Status)
+		s.Quotes = s.ReadQuoteStatus()
 		reason, err := f.store.ExecutionLock(strconv.FormatInt(r.id, 10), session.CurrentTradingDate(f.now()))
 		if err != nil {
 			reason = "Local lock status unavailable"

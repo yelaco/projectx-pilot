@@ -22,6 +22,11 @@ import (
 )
 
 type Engine struct {
+	lastReconcileAttempt, lastReconcileSuccess time.Time
+	reconcileError                             string
+	protectionCheck                            string
+	protectionCheckedAt                        time.Time
+
 	faultLockReview          *faultLockChallenge
 	staleQuoteReview         *staleQuoteChallenge
 	ready                    chan struct{}
@@ -124,7 +129,12 @@ func (e *Engine) Status() Status {
 	return e.snapshotLocked()
 }
 func (e *Engine) snapshotLocked() Status {
-	s := Status{RunRequested: e.runRequested, RunProfileID: e.runProfileID, RunMessage: e.runMessage, Automated: e.config.Automated, AutomationProfileID: e.config.AutomationProfileID, ArmedAt: e.armedAt, Enabled: e.config.Enabled, Armed: e.now().Before(e.armedUntil), AccountID: e.config.AccountID, ArmedUntil: e.armedUntil, Error: e.message, Intents: append([]Intent(nil), e.intents...)}
+	s := Status{MonitorRunning: e.ctx != nil && e.ctx.Err() == nil, LastReconcileAttempt: e.lastReconcileAttempt, LastReconcileSuccess: e.lastReconcileSuccess, ReconcileError: e.reconcileError, ProtectionCheck: e.protectionCheck, ProtectionCheckedAt: e.protectionCheckedAt, Quotes: e.quoteStatusLocked(), RunRequested: e.runRequested, RunProfileID: e.runProfileID, RunMessage: e.runMessage, Automated: e.config.Automated, AutomationProfileID: e.config.AutomationProfileID, ArmedAt: e.armedAt, Enabled: e.config.Enabled, Armed: e.now().Before(e.armedUntil), AccountID: e.config.AccountID, ArmedUntil: e.armedUntil, Error: e.message, Intents: append([]Intent(nil), e.intents...)}
+	if source, ok := e.quotes.(interface {
+		Inspect(string) realtime.QuoteStatus
+	}); ok {
+		s.quoteSource = source
+	}
 	if e.submissionDetail != nil {
 		detail := *e.submissionDetail
 		s.SubmissionDetail = &detail
@@ -775,4 +785,29 @@ func safeSubmissionFailure(err error) string {
 		return detail
 	}
 	return "Order submission failed without a confirmed result."
+}
+
+// quoteStatusLocked only reads existing local caches; it never warms a feed.
+func (e *Engine) quoteStatusLocked() realtime.QuoteStatus {
+	contract := e.config.AutomationContractID
+	if i := e.active(); i != nil {
+		contract = i.Contract.ID
+	} else if e.preview != nil {
+		contract = e.preview.Contract.ID
+	}
+	if contract == "" {
+		return realtime.QuoteStatus{State: "No selected subscription"}
+	}
+	if inspect, ok := e.quotes.(interface {
+		Inspect(string) realtime.QuoteStatus
+	}); ok {
+		return inspect.Inspect(contract)
+	}
+	if e.quotes != nil {
+		q, err := e.quotes.Get(contract)
+		if err == nil {
+			return realtime.QuoteStatus{Contract: contract, State: "Cached quote available", At: q.At, Fresh: true}
+		}
+	}
+	return realtime.QuoteStatus{Contract: contract, State: "Cached quote unavailable"}
 }

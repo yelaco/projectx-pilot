@@ -190,3 +190,22 @@ func TestTradingWebhookIsIndependentAndUsesTradingReportContent(t *testing.T) {
 		t.Fatal("daily settings changed system webhook")
 	}
 }
+
+func TestSystemReportLinksOnlyToLocalHealthChecklist(t *testing.T) {
+	d := openTest(t)
+	_ = d.Configure(true, offlineHook, false)
+	if err := d.SetLocalDashboard("public.example:8080"); err == nil {
+		t.Fatal("public dashboard link accepted")
+	}
+	if err := d.SetLocalDashboard("127.0.0.1:8181"); err != nil {
+		t.Fatal(err)
+	}
+	d.client = &http.Client{Transport: roundTrip(func(req *http.Request) (*http.Response, error) {
+		body, _ := io.ReadAll(req.Body)
+		if !strings.Contains(string(body), "http://127.0.0.1:8181/system-health") {
+			t.Error("missing local checklist link")
+		}
+		return &http.Response{StatusCode: 200, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{}`))}, nil
+	})}
+	d.send(context.Background(), offlineHook, report{message: "Account #42: test attention", generation: d.generation, at: time.Now()})
+}

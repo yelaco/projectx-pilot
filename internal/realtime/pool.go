@@ -87,3 +87,14 @@ func (h *Handle) Wait(ctx context.Context, contract string) (Quote, error) {
 	}
 	return f.Wait(ctx, contract)
 }
+
+// Inspect reads the shared cache only. It never subscribes, waits or calls REST.
+func (h *Handle) Inspect(contract string) QuoteStatus {
+	h.mu.Lock()
+	feed, match := h.feed, h.contract == contract
+	h.mu.Unlock()
+	if feed == nil || !match {
+		return QuoteStatus{Contract: contract, State: "Shared subscription not ready"}
+	}
+	return feed.Inspect(contract)
+}

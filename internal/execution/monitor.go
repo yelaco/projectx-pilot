@@ -28,6 +28,7 @@ func (e *Engine) Run(ctx context.Context) {
 		if e.quotes != nil {
 			e.quotes.Close()
 		}
+		e.publishLocked()
 	}()
 	timer := time.NewTimer(0)
 	defer timer.Stop()
@@ -41,11 +42,14 @@ func (e *Engine) Run(ctx context.Context) {
 		e.mu.Lock()
 		i := e.active()
 		if i != nil {
+			e.lastReconcileAttempt = e.now().UTC()
 			monitorCtx, cancel := context.WithTimeout(ctx, 12*time.Second)
 			if err := e.connect(i.AccountID); err != nil {
 				e.disarm()
 				e.runRequested = false
 				e.message = "cannot connect for recovery; manage the pinned account in TopstepX"
+				e.reconcileError = e.message
+				e.protectionCheck = "unknown"
 				i.AttentionRequired = true
 				i.Message = e.message
 				_ = e.persist(i)
@@ -56,8 +60,12 @@ func (e *Engine) Run(ctx context.Context) {
 					e.runRequested = false
 					i.AttentionRequired = true
 					e.message = err.Error()
+					e.reconcileError = e.message
 					i.Message = e.message
 					_ = e.persist(i)
+				} else {
+					e.lastReconcileSuccess = e.now().UTC()
+					e.reconcileError = ""
 				}
 			}
 			cancel()
@@ -96,6 +104,8 @@ func (e *Engine) monitorDelayLocked() time.Duration {
 }
 
 func (e *Engine) reconcile(ctx context.Context, i *Intent) error {
+	e.protectionCheck = "unknown"
+	e.protectionCheckedAt = time.Time{}
 	history, err := e.api.Orders(ctx, i.AccountID, i.Window.StartOfSession(), e.now().UTC())
 	if err != nil {
 		return errors.New("order reconciliation unavailable; entries paused")
@@ -238,12 +248,16 @@ func (e *Engine) reconcile(ctx context.Context, i *Intent) error {
 		return e.requireAttention(i, "position exposure differs from observed entry fills")
 	}
 	if err = verifyProtection(*i, p, orders); err != nil {
+		e.protectionCheck = "mismatch"
+		e.protectionCheckedAt = e.now().UTC()
 		return e.requireAttention(i, err.Error())
 	}
 	i.State = "protected"
 	if parent.FillVolume < parent.Size {
 		i.State = "partial"
 	}
+	e.protectionCheck = "verified"
+	e.protectionCheckedAt = e.now().UTC()
 	i.AttentionRequired = false
 	i.Message = "Observed exposure has matching linked stop and target coverage."
 	verified := p

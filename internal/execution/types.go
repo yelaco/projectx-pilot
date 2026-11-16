@@ -133,6 +133,17 @@ type SubmissionDetail struct {
 }
 
 type Status struct {
+	quoteSource interface {
+		Inspect(string) realtime.QuoteStatus
+	}
+
+	MonitorRunning                             bool
+	LastReconcileAttempt, LastReconcileSuccess time.Time
+	ReconcileError                             string
+	ProtectionCheck                            string
+	ProtectionCheckedAt                        time.Time
+	Quotes                                     realtime.QuoteStatus
+
 	SubmissionDetail         *SubmissionDetail `json:",omitempty"`
 	RunRequested             bool
 	RunProfileID, RunMessage string
@@ -152,4 +163,13 @@ func (c Config) maxAge() time.Duration {
 		return c.SignalMaxAge
 	}
 	return 5 * time.Minute
+}
+
+// ReadQuoteStatus refreshes diagnostics from the already-shared cache only. The
+// unexported source is excluded from JSON and has no broker-write capability.
+func (s Status) ReadQuoteStatus() realtime.QuoteStatus {
+	if s.quoteSource != nil && s.Quotes.Contract != "" {
+		return s.quoteSource.Inspect(s.Quotes.Contract)
+	}
+	return s.Quotes
 }

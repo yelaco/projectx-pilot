@@ -64,13 +64,52 @@ function renderConnectionLog(rows) {
   if (!body.children.length) { const tr = document.createElement('tr'); const td = document.createElement('td'); td.colSpan = 4; td.className = 'empty'; td.textContent = 'No webhook or tunnel events yet. Enable the preset or send an alert to start.'; tr.appendChild(td); body.appendChild(tr); }
   filterConnectionLog();
 }
+function filterSystemHealth() {
+ const query=(document.querySelector('#health-search')?.value || '').toLowerCase();
+ const issuesOnly=!!document.querySelector('#health-issues-only')?.checked;
+ let visible=0;
+ document.querySelectorAll('#system-health-checks .health-check').forEach(card => {
+  const issue=['attention','blocked','unknown'].includes(card.dataset.state);
+  card.hidden=(issuesOnly && !issue) || !card.textContent.toLowerCase().includes(query);
+  if(!card.hidden) visible++;
+ });
+ const empty=document.querySelector('#health-empty');if(empty)empty.hidden=visible>0;
+}
+document.querySelector('#health-search')?.addEventListener('input',filterSystemHealth);
+document.querySelector('#health-issues-only')?.addEventListener('change',filterSystemHealth);
+function renderSystemHealth(health) {
+ const body=document.querySelector('#system-health-checks');if(!body)return;
+ body.replaceChildren();
+ for(const check of health.Checks || []) {
+  const card=document.createElement('article');card.className='health-check';card.dataset.state=check.State;
+  const heading=document.createElement('div');heading.className='health-check-heading';
+  const symbol=document.createElement('span');symbol.className='health-symbol';symbol.setAttribute('aria-hidden','true');symbol.textContent=check.Symbol;
+  const title=document.createElement('div');const group=document.createElement('small');group.textContent=check.Group;const name=document.createElement('h2');name.textContent=check.Name;title.append(group,name);
+  const state=document.createElement('span');state.className='health-state';state.textContent=check.Label;heading.append(symbol,title,state);card.appendChild(heading);
+  const summary=document.createElement('p');summary.textContent=check.Summary;card.appendChild(summary);
+  if(check.Detail){const detail=document.createElement('p');detail.className='footnote';detail.textContent=check.Detail;card.appendChild(detail);}
+  const footer=document.createElement('div');footer.className='health-check-footer';const at=document.createElement('small');at.textContent=check.ObservedAt && !check.ObservedAt.startsWith('0001') ? 'Observed '+check.ObservedAt+' UTC' : 'No timestamped observation';footer.appendChild(at);
+  if(check.Href && /^\/(?!\/)/.test(check.Href)){const link=document.createElement('a');link.href=check.Href;link.textContent=check.Action+' →';footer.appendChild(link);}
+  card.appendChild(footer);body.appendChild(card);
+ }
+ for(const [key,value,label] of [['attention',health.Attention,'need attention'],['blocked',health.Blocked,'blocked'],['unknown',health.Unknown,'not verified'],['ok',health.OK,'OK']]){const node=document.querySelector('[data-health-count="'+key+'"]');if(node)node.textContent=value+' '+label;}
+ put('health-captured','Snapshot: '+health.CapturedAt+' UTC');
+ put('connection',health.ConnectionConnected?'Connected':'Not connected');
+ const stale=document.querySelector('#health-stale-warning');if(stale)stale.hidden=true;
+ filterSystemHealth();
+}
+filterSystemHealth();
 const monitorInterval = document.querySelector('#connection-log-rows, [data-monitor="execution-state"], [data-profile-arming], #target-job-rows') ? 3000 : 10000;
 async function monitor() {
   if (!document.hidden) {
+    const healthPage=!!document.querySelector('#system-health-checks');
+    const controller=new AbortController();
+    const deadline=healthPage?setTimeout(()=>controller.abort(),4000):null;
     try {
-      const response = await fetch('/api/monitor', {credentials:'same-origin', cache:'no-store'});
+      const response = await fetch(healthPage?'/api/system-health':'/api/monitor', {credentials:'same-origin', cache:'no-store',signal:controller.signal});
       if (!response.ok) throw new Error('unavailable');
       const v = await response.json();
+ if(healthPage){renderSystemHealth(v);setTimeout(monitor,monitorInterval);return;}
       put('execution-state', v.Execution?.State || 'idle');
       put('execution-mode', v.Execution?.RunRequested ? 'Automation running' : v.Execution?.Armed ? (v.Execution?.Automated ? 'Automatic trading active' : 'Manual trading active') : v.Execution?.Configured ? 'Execution configured · paused' : 'Read-only mode');
       document.querySelectorAll('[data-profile-arming]').forEach(node => {
@@ -158,7 +197,7 @@ async function monitor() {
         }
         filterActivity();
       }
-    } catch { put('monitor-health', 'Monitoring update failed. Reload or check the local service.'); put('connection-log-health', 'Log update failed. Check the local admin service.'); }
+    } catch { put('monitor-health', 'Monitoring update failed. Reload or check the local service.'); put('connection-log-health', 'Log update failed. Check the local admin service.'); const stale=document.querySelector('#health-stale-warning');if(stale)stale.hidden=false; } finally {if(deadline)clearTimeout(deadline);}
   }
   setTimeout(monitor, monitorInterval);
 }

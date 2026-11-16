@@ -797,8 +797,15 @@ func handler(s *app.Service, token string, m *admin.Manager) http.Handler {
 			return
 		}
 		switch r.URL.Path {
-		case "/runners", "/operation-days", "/execution", "/", "/automations", "/automations/new", "/deliveries", "/signals", "/accounts", "/contracts", "/activity", "/settings", "/settings/webhooks", "/settings/access", "/trade-managers", "/trade-managers/new":
+		case "/system-health", "/runners", "/operation-days", "/execution", "/", "/automations", "/automations/new", "/deliveries", "/signals", "/accounts", "/contracts", "/activity", "/settings", "/settings/webhooks", "/settings/access", "/trade-managers", "/trade-managers/new":
 			render(w, 200, "", "")
+		case "/api/system-health":
+			if m == nil {
+				http.NotFound(w, r)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(m.Monitor(r.Context()).Health)
 		case "/api/monitor":
 			if m == nil {
 				http.NotFound(w, r)

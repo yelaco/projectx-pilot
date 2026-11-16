@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -37,6 +38,7 @@ type report struct {
 	at         time.Time
 }
 type Discord struct {
+	healthURL  string
 	daily      bool
 	mu         sync.Mutex
 	path       string
@@ -96,6 +98,19 @@ func OpenDaily(path string) (*Discord, error) {
 	}
 	d.daily = true
 	return d, nil
+}
+
+// SetLocalDashboard supplies a diagnostic link only; it accepts no public host.
+func (d *Discord) SetLocalDashboard(listen string) error {
+	host, port, err := net.SplitHostPort(listen)
+	n, parseErr := strconv.Atoi(port)
+	if err != nil || parseErr != nil || host != "127.0.0.1" || n < 1 || n > 65535 {
+		return errors.New("health link requires the local dashboard address")
+	}
+	d.mu.Lock()
+	d.healthURL = "http://" + net.JoinHostPort(host, port) + "/system-health"
+	d.mu.Unlock()
+	return nil
 }
 func (d *Discord) Configure(enabled bool, raw string, clear bool) error {
 	d.mu.Lock()
@@ -207,6 +222,16 @@ func (d *Discord) send(ctx context.Context, endpoint string, r report) {
 	text := "ProjectX Pilot — attention required\n" + r.at.Format(time.RFC3339) + "\n" + r.message + "\nAutomatic flattening is disabled. Review the local dashboard and exact account."
 	if d.daily {
 		text = "ProjectX Pilot — daily trading report\n" + r.at.Format(time.RFC3339) + "\n" + r.message + "\nRead-only report; no trading action requested."
+	}
+	if !d.daily {
+		d.mu.Lock()
+		link := d.healthURL
+		d.mu.Unlock()
+		if link == "" {
+			text += "\nDiagnostics: System health in your local dashboard (/system-health)."
+		} else {
+			text += "\nSystem health (on your laptop): " + link
+		}
 	}
 	chars := []rune(text)
 	if len(chars) > 1900 {
