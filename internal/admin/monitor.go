@@ -9,6 +9,8 @@ import (
 
 	"projectxbot/internal/app"
 	"projectxbot/internal/execution"
+	"projectxbot/internal/fleet"
+	"projectxbot/internal/realtime"
 	"projectxbot/internal/storage"
 	"projectxbot/internal/tunnel"
 )
@@ -28,6 +30,11 @@ type ExecutionMonitor struct {
 	ObservedAt               time.Time
 }
 type Monitor struct {
+	TargetJobs                   []storage.TargetJob
+	UserData                     realtime.UserStatus
+	Runners                      []fleet.View
+	Profiles                     map[string]execution.Status
+	GlobalPaused                 bool
 	WebhookURLs                  map[string]string
 	PublicURLKind                string
 	AutomationResults            []storage.AutomationReceipt
@@ -64,8 +71,8 @@ func (m *Manager) Note(level, component, message string) {
 	}
 }
 func (m *Manager) Monitor(ctx context.Context) Monitor {
-	statusExecution := m.ExecutionStatus()
-	summary := ExecutionMonitor{SubmissionDetail: statusExecution.SubmissionDetail, Configured: m.ExecutionConfig().Enabled, RunRequested: statusExecution.RunRequested, RunProfileID: statusExecution.RunProfileID, RunMessage: statusExecution.RunMessage, Automated: statusExecution.Automated, AutomationProfileID: statusExecution.AutomationProfileID, Armed: statusExecution.Armed, AccountID: statusExecution.AccountID, ArmedUntil: statusExecution.ArmedUntil, State: "idle", Message: statusExecution.Error}
+	statusExecution := m.RuntimeStatus()
+	summary := ExecutionMonitor{SubmissionDetail: statusExecution.SubmissionDetail, Configured: m.ExecutionConfig().Enabled || m.FleetConfigured(), RunRequested: statusExecution.RunRequested, RunProfileID: statusExecution.RunProfileID, RunMessage: statusExecution.RunMessage, Automated: statusExecution.Automated, AutomationProfileID: statusExecution.AutomationProfileID, Armed: statusExecution.Armed, AccountID: statusExecution.AccountID, ArmedUntil: statusExecution.ArmedUntil, State: "idle", Message: statusExecution.Error}
 	if len(statusExecution.Intents) > 0 {
 		i := statusExecution.Intents[0]
 		summary.AccountID = i.AccountID
@@ -80,6 +87,16 @@ func (m *Manager) Monitor(ctx context.Context) Monitor {
 	routing := m.Ingress()
 	results, _ := m.AutomationResults()
 	v := Monitor{WebhookURLs: routing.WebhookURLs(), PublicURLKind: routing.PublicURLKind(), AutomationResults: results, Execution: summary, ReceivingEnabled: routing.Enabled, PublicURL: routing.PublicURL, Tunnel: tunnel.Status{State: "not managed"}}
+	v.Runners, v.GlobalPaused = m.RunnerSnapshot()
+	v.UserData = m.UserDataStatus()
+	v.TargetJobs, _ = m.TargetResults()
+	if len(v.TargetJobs) > 100 {
+		v.TargetJobs = v.TargetJobs[:100]
+	}
+	for n := range v.TargetJobs {
+		v.TargetJobs[n].Policy = ""
+	}
+	v.Profiles = m.ProfileStatuses()
 	m.mu.Lock()
 	service, status := m.service, m.tunnelStatus
 	v.UptimeSeconds = int64(time.Since(m.startedAt).Seconds())

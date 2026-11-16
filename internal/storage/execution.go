@@ -2,6 +2,7 @@ package storage
 
 /*
 #include <sqlite3.h>
+#include <stdlib.h>
 */
 import "C"
 import (
@@ -13,7 +14,7 @@ import (
 type ExecRow struct{ ID, Account, Session, State, Payload string }
 
 func (s *Inbox) executionSchema() error {
-	return s.exec(`CREATE TABLE IF NOT EXISTS execution_intents(id TEXT PRIMARY KEY,account TEXT NOT NULL,session TEXT NOT NULL,state TEXT NOT NULL,payload TEXT NOT NULL); CREATE UNIQUE INDEX IF NOT EXISTS one_active_execution ON execution_intents(account) WHERE state NOT IN ('closed','rejected','cancelled'); CREATE UNIQUE INDEX IF NOT EXISTS one_active_bot_execution ON execution_intents((1)) WHERE state NOT IN ('closed','rejected','cancelled'); CREATE TABLE IF NOT EXISTS execution_locks(account TEXT NOT NULL,session TEXT NOT NULL,reason TEXT NOT NULL,PRIMARY KEY(account,session));`)
+	return s.exec(`CREATE TABLE IF NOT EXISTS execution_intents(id TEXT PRIMARY KEY,account TEXT NOT NULL,session TEXT NOT NULL,state TEXT NOT NULL,payload TEXT NOT NULL); CREATE UNIQUE INDEX IF NOT EXISTS one_active_execution ON execution_intents(account) WHERE state NOT IN ('closed','rejected','cancelled'); DROP INDEX IF EXISTS one_active_bot_execution; CREATE TABLE IF NOT EXISTS execution_locks(account TEXT NOT NULL,session TEXT NOT NULL,reason TEXT NOT NULL,PRIMARY KEY(account,session));`)
 }
 func (s *Inbox) ReserveExecution(r ExecRow) error {
 	s.mu.Lock()
@@ -47,7 +48,8 @@ func (s *Inbox) SaveExecution(r ExecRow) error {
 	}
 	return nil
 }
-func (s *Inbox) Executions() ([]ExecRow, error) {
+func (s *Inbox) Executions() ([]ExecRow, error) { return s.executionRows("") }
+func (s *Inbox) executionRows(account string) ([]ExecRow, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.db == nil {
@@ -56,11 +58,20 @@ func (s *Inbox) Executions() ([]ExecRow, error) {
 	if err := s.executionSchema(); err != nil {
 		return nil, err
 	}
-	stmt, err := s.prepare("SELECT id,account,session,state,payload FROM execution_intents ORDER BY rowid DESC")
+	query := "SELECT id,account,session,state,payload FROM execution_intents"
+	if account != "" {
+		query += " WHERE account=?"
+	}
+	stmt, err := s.prepare(query + " ORDER BY rowid DESC")
 	if err != nil {
 		return nil, err
 	}
 	defer C.sqlite3_finalize(stmt)
+	if account != "" {
+		value := C.CString(account)
+		C.sqlite3_bind_text(stmt, 1, value, -1, (*[0]byte)(C.SQLITE_TRANSIENT))
+		C.free(unsafe.Pointer(value))
+	}
 	var rows []ExecRow
 	for {
 		rc := C.sqlite3_step(stmt)
@@ -133,7 +144,7 @@ func (s *Inbox) ResolveOneWayOCOLock(account, session, intent, expected string) 
 		return err
 	}
 	defer s.exec("ROLLBACK")
-	if err := s.write(`DELETE FROM execution_locks WHERE account=? AND session=? AND reason=? AND EXISTS(SELECT 1 FROM execution_intents WHERE id=? AND account=? AND session=? AND state='closed') AND NOT EXISTS(SELECT 1 FROM execution_intents WHERE state NOT IN ('closed','rejected','cancelled'))`, account, session, expected, intent, account, session); err != nil {
+	if err := s.write(`DELETE FROM execution_locks WHERE account=? AND session=? AND reason=? AND EXISTS(SELECT 1 FROM execution_intents WHERE id=? AND account=? AND session=? AND state='closed') AND NOT EXISTS(SELECT 1 FROM execution_intents WHERE account=? AND state NOT IN ('closed','rejected','cancelled'))`, account, session, expected, intent, account, session, account); err != nil {
 		return err
 	}
 	if C.sqlite3_changes(s.db) != 1 {

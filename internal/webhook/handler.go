@@ -24,11 +24,12 @@ type Sink interface {
 	Get(string) (storage.Record, error)
 }
 type Options struct {
-	Resolve func(string) (ingress.Route, bool)
-	Enabled bool
-	Token   string
-	MaxAge  time.Duration
-	Now     func() time.Time
+	AfterStore func()
+	Resolve    func(string) (ingress.Route, bool)
+	Enabled    bool
+	Token      string
+	MaxAge     time.Duration
+	Now        func() time.Time
 }
 
 func New(sink Sink, o Options) (http.Handler, error) {
@@ -197,7 +198,7 @@ func New(sink Sink, o Options) (http.Handler, error) {
 			http.Error(w, validationErr.Error(), 422)
 			return
 		}
-		if err = sink.Insert(storage.Record{Signal: sig, ProfileID: route.ID}); err != nil {
+		if err = sink.Insert(storage.Record{Signal: sig, ProfileID: route.ID, ReceivedAt: now.UTC().Format(time.RFC3339Nano)}); err != nil {
 			if errors.Is(err, storage.ErrDuplicate) {
 				previous, lookupErr := sink.Get(sig.ID)
 				if lookupErr != nil {
@@ -222,6 +223,9 @@ func New(sink Sink, o Options) (http.Handler, error) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
+		if o.AfterStore != nil {
+			o.AfterStore()
+		}
 		audit("INFO", "Alert durably received; local routing determines review or approved automatic execution.")
 		w.WriteHeader(http.StatusAccepted)
 		_, _ = w.Write([]byte(`{"status":"received","execution_status":"queued"}`))
@@ -230,8 +234,12 @@ func New(sink Sink, o Options) (http.Handler, error) {
 
 // Managed reads routing settings atomically on each request so revocation applies
 // immediately without importing an admin manager or ProjectX client.
-func Managed(sink Sink, path string) (http.Handler, error) {
-	return New(sink, Options{Enabled: true, MaxAge: 5 * time.Minute, Resolve: func(p string) (ingress.Route, bool) {
+func Managed(sink Sink, path string, wake ...func()) (http.Handler, error) {
+	var after func()
+	if len(wake) > 0 {
+		after = wake[0]
+	}
+	return New(sink, Options{AfterStore: after, Enabled: true, MaxAge: 5 * time.Minute, Resolve: func(p string) (ingress.Route, bool) {
 		settings, err := ingress.Load(path)
 		if err != nil || !settings.Enabled {
 			return ingress.Route{}, false

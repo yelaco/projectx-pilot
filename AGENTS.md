@@ -19,3 +19,8 @@
 - Automatic write support includes API-verified simulated Practice, Trading Combine and Express Funded accounts; Live Funded is unsupported by Topstep API. Manual Practice test tickets remain PRAC-only. Account identity for automation uses pinned numeric ID, not a name prefix, with verified ordinary-session hours (operator-confirmed session windows or the reviewed, bounded continuous calendar). Legacy policies require a known fixed floor; per-trade-only policies require no floor. Merged holiday sessions deny arming.
 - Hold the process execution lease before workers/listeners. Recovery never restores arming or replays placement; emergency mutation latches must survive restart.
 - Automatic deliveries are durably claimed once before dispatch. Never replay a claim after interruption; pre-arming/disarmed alerts must not fire later. Review-only profiles remain separate.
+
+- Automatic execution is account-scoped: one running profile owns an account; distinct accounts run independently. Keep the SQLite one-active-intent-per-account constraint and never restore the global active-intent index.
+- Freeze and atomically claim every target before fanout. Independent outcomes are not an atomic broker transaction; never undo accepted targets or replay blocked/interrupted ones.
+- Unix datagrams carry wake hints only after inbox commit. SQLite remains authority; socket loss falls back to bounded scans. Never accept account, credentials or execution authority through a socket notification.
+- Share JWT, contract subscriptions and request governor. Never cache fresh exposure/risk checks merely to reduce entry latency; preserve mutation budget under the documented API ceiling.

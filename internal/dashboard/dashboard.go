@@ -9,6 +9,8 @@ import (
 	"embed"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"html/template"
 	"net/http"
 	"net/url"
@@ -20,9 +22,11 @@ import (
 	"projectxbot/internal/admin"
 	"projectxbot/internal/app"
 	"projectxbot/internal/execution"
+	"projectxbot/internal/fleet"
 	"projectxbot/internal/ingress"
 	"projectxbot/internal/news"
 	"projectxbot/internal/projectx"
+	"projectxbot/internal/realtime"
 	"projectxbot/internal/risk"
 	"projectxbot/internal/session"
 	"projectxbot/internal/storage"
@@ -39,6 +43,13 @@ var stylesheet string
 var page = template.Must(template.New("admin").ParseFS(templateFiles, "admin.html", "pages/*.html"))
 
 type view struct {
+	UserData                                                                 realtime.UserStatus
+	ProfileTargets                                                           []int64
+	ProfileTargetNames                                                       string
+	Runners                                                                  []fleet.View
+	GlobalPaused                                                             bool
+	TargetJobs                                                               []storage.TargetJob
+	DeliveryJobs                                                             map[string][]storage.TargetJob
 	NewsStatus                                                               news.Status
 	OperationManagers                                                        []admin.OperationWeek
 	OperationWeek                                                            admin.OperationWeek
@@ -218,6 +229,19 @@ func handler(s *app.Service, token string, m *admin.Manager) http.Handler {
 					}
 				}
 				v.Execution = m.ExecutionStatus()
+				if name != "execution" {
+					v.Execution = m.RuntimeStatus()
+					if m.FleetConfigured() {
+						v.ExecutionConfig.Enabled = true
+					}
+				}
+				v.Runners, v.GlobalPaused = m.RunnerSnapshot()
+				v.UserData = m.UserDataStatus()
+				v.TargetJobs, _ = m.TargetResults()
+				v.DeliveryJobs = map[string][]storage.TargetJob{}
+				for _, j := range v.TargetJobs {
+					v.DeliveryJobs[j.DeliveryID] = append(v.DeliveryJobs[j.DeliveryID], j)
+				}
 				for _, intent := range v.Execution.Intents {
 					if intent.AccountID == v.ExecutionConfig.AccountID && intent.State == "closed" && intent.HaltKind == "fault" && intent.EmergencyAttempted && intent.Plan.Quantity == 1 && intent.Session == lockSession && lockReason == "protective orders missing, pending or inconsistent" {
 						v.OCORecoveryCandidates = append(v.OCORecoveryCandidates, intent)
@@ -287,16 +311,37 @@ func handler(s *app.Service, token string, m *admin.Manager) http.Handler {
 					v.Profile.TradeManagerID = values[0]
 				}
 			}
+			if v.Page == "profile" {
+				for _, tm := range v.Policies.TradeManagers {
+					if tm.ID == v.Profile.TradeManagerID {
+						v.ProfileTargets = tm.AccountIDs
+					}
+				}
+				parts := []string{}
+				for _, id := range v.ProfileTargets {
+					label := fmt.Sprintf("#%d", id)
+					for _, a := range v.State.Accounts {
+						if a.ID == id {
+							label += " " + a.Name
+						}
+					}
+					parts = append(parts, label)
+				}
+				v.ProfileTargetNames = strings.Join(parts, ", ")
+			}
 			if v.Page == "profile" && v.Tab == "execution" {
+				v.Execution = m.ProfileStatus(v.Profile.ID)
+				v.ExecutionConfig = m.ProfileConfig(v.Profile.ID)
+				v.PracticeFloor = m.ProfileFloor(v.Profile.ID)
 				for _, manager := range v.Policies.TradeManagers {
 					if manager.ID == v.Profile.TradeManagerID {
 						v.PerTradeOnly = manager.PerTradeOnly
 					}
 				}
-				v.ProfileExecutionConfigured = v.ExecutionConfig.AutomationProfileID == v.Profile.ID && v.ExecutionConfig.AccountID == v.Profile.AccountID && v.ExecutionConfig.TradeManagerID == v.Profile.TradeManagerID
+				v.ProfileExecutionConfigured = v.ExecutionConfig.AutomationProfileID == v.Profile.ID && v.ExecutionConfig.TradeManagerID == v.Profile.TradeManagerID
 				v.ProfileAutomationArmed = v.Execution.Armed && v.Execution.Automated && v.Execution.AutomationProfileID == v.Profile.ID
 				v.ProfileRunRequested = v.Execution.RunRequested && v.Execution.RunProfileID == v.Profile.ID
-				v.ContinuousReady, v.ContinuousReadiness = m.ContinuousReadiness(v.Profile.ID)
+				v.ContinuousReady, v.ContinuousReadiness = m.FleetReadiness(v.Profile.ID)
 				if v.ProfileRunRequested {
 					v.ProfileRunMessage = v.Execution.RunMessage
 				} else if v.ProfileAutomationArmed {
@@ -383,7 +428,7 @@ func handler(s *app.Service, token string, m *admin.Manager) http.Handler {
 			return
 		}
 		if r.Method == http.MethodPost {
-			if m == nil || (r.URL.Path != "/news-refresh" && r.URL.Path != "/operation-days" && r.URL.Path != "/settings" && r.URL.Path != "/refresh" && r.URL.Path != "/account-permission" && r.URL.Path != "/automation" && r.URL.Path != "/automation-delete" && r.URL.Path != "/signal-import" && r.URL.Path != "/signal-review" && r.URL.Path != "/delivery-import" && r.URL.Path != "/delivery-reject" && r.URL.Path != "/ingress" && r.URL.Path != "/mapping" && r.URL.Path != "/admin-access" && r.URL.Path != "/trade-manager" && r.URL.Path != "/trade-manager-delete" && r.URL.Path != "/automation-execution" && !profileExecutionAction(r.URL.Path) && !executionAction(r.URL.Path)) {
+			if m == nil || (!strings.HasPrefix(r.URL.Path, "/fleet/") && r.URL.Path != "/news-refresh" && r.URL.Path != "/operation-days" && r.URL.Path != "/settings" && r.URL.Path != "/refresh" && r.URL.Path != "/account-permission" && r.URL.Path != "/automation" && r.URL.Path != "/automation-delete" && r.URL.Path != "/signal-import" && r.URL.Path != "/signal-review" && r.URL.Path != "/delivery-import" && r.URL.Path != "/delivery-reject" && r.URL.Path != "/ingress" && r.URL.Path != "/mapping" && r.URL.Path != "/admin-access" && r.URL.Path != "/trade-manager" && r.URL.Path != "/trade-manager-delete" && r.URL.Path != "/automation-execution" && !profileExecutionAction(r.URL.Path) && !executionAction(r.URL.Path)) {
 				http.Error(w, "method not allowed", 405)
 				return
 			}
@@ -596,6 +641,42 @@ func handler(s *app.Service, token string, m *admin.Manager) http.Handler {
 				redirectAction(w, r, "automation")
 				return
 			}
+			if strings.HasPrefix(r.URL.Path, "/fleet/") {
+				var err error
+				switch r.URL.Path {
+				case "/fleet/pause":
+					err = m.GlobalPause()
+				case "/fleet/resume":
+					err = m.GlobalResume()
+				case "/fleet/flatten":
+					err = m.GlobalFlatten(r.Context(), current.ID, r.PostForm.Get("current_password"))
+				case "/fleet/review-oco":
+					account, e := strconv.ParseInt(r.PostForm.Get("account_id"), 10, 64)
+					if e != nil || account <= 0 {
+						err = errors.New("invalid runner account")
+					} else {
+						err = m.ReviewRunnerOCOLock(r.Context(), current.ID, r.PostForm.Get("current_password"), account, r.PostForm.Get("intent_id"))
+					}
+				case "/fleet/account-pause", "/fleet/account-flatten":
+					account, e := strconv.ParseInt(r.PostForm.Get("account_id"), 10, 64)
+					if e != nil || account <= 0 {
+						err = errors.New("invalid runner account")
+					} else if r.URL.Path == "/fleet/account-pause" {
+						err = m.PauseRunner(account)
+					} else {
+						err = m.FlattenRunner(r.Context(), current.ID, r.PostForm.Get("current_password"), account)
+					}
+				default:
+					http.NotFound(w, r)
+					return
+				}
+				if err != nil {
+					render(w, 400, "", err.Error())
+					return
+				}
+				http.Redirect(w, r, "/runners", http.StatusSeeOther)
+				return
+			}
 			if r.URL.Path == "/news-refresh" {
 				call, cancel := context.WithTimeout(r.Context(), 15*time.Second)
 				err := m.RefreshNews(call)
@@ -636,7 +717,7 @@ func handler(s *app.Service, token string, m *admin.Manager) http.Handler {
 			return
 		}
 		switch r.URL.Path {
-		case "/operation-days", "/execution", "/", "/automations", "/automations/new", "/deliveries", "/signals", "/accounts", "/contracts", "/activity", "/settings", "/settings/webhooks", "/settings/access", "/trade-managers", "/trade-managers/new":
+		case "/runners", "/operation-days", "/execution", "/", "/automations", "/automations/new", "/deliveries", "/signals", "/accounts", "/contracts", "/activity", "/settings", "/settings/webhooks", "/settings/access", "/trade-managers", "/trade-managers/new":
 			render(w, 200, "", "")
 		case "/api/monitor":
 			if m == nil {

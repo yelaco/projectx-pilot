@@ -42,6 +42,19 @@ func (m *Manager) RejectDelivery(id string) error {
 // The webhook receiver has no reference to Manager or this method.
 func (m *Manager) ImportDelivery(id, profileID, contractID string) error {
 	m.mu.Lock()
+	if jobs, err := m.executionStore.DeliveryTargets(id); err != nil {
+		m.mu.Unlock()
+		return err
+	} else if len(jobs) > 0 {
+		m.mu.Unlock()
+		return errors.New("this delivery already has automatic account jobs; inspect Execution runners")
+	}
+	for _, p := range m.policies.Automations {
+		if p.ID == profileID && p.ExecutionMode == "automatic" {
+			m.mu.Unlock()
+			return errors.New("automatic profiles use account routing; switch to review-only before local import")
+		}
+	}
 	if _, err := m.executionStore.AutomationReceipt(id); err == nil {
 		m.mu.Unlock()
 		return errors.New("this alert already entered automatic processing; inspect its execution result")

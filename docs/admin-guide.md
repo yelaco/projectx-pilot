@@ -83,9 +83,11 @@ Once `admins.json` exists, `BOT_DASHBOARD_TOKEN` is **not** an override or recov
 
 Use **Trade managers → New trade manager**, then select that policy in an automation's General tab. This separates the alert source (automation) from account routing and risk configuration (trade manager).
 
-A policy stores account IDs, single-account or multiple-account routing, planned risk per trade, daily loss budget, maximum trades per Topstep session, concurrent positions, open-risk budget, an optional strategy-dependent profit objective, and a combined budget across all copies of one signal. Defaults come from the requested configuration: $150 trade risk, $450 daily loss, six trades/session, one position, $150 open risk, $150 aggregate signal risk and $200 target objective. Limits apply per account except the explicit cross-account signal cap. The default aggregate cap does not multiply automatically when adding accounts.
+New/saved policies store planned risk per trade plus explicit single/multiple-account routing. Per-trade-only policies intentionally have no daily loss, trade-count, MLL or aggregate portfolio cap. Existing legacy policies retain their limits until explicitly saved. See [risk management](risk-management.md).
 
-Single-account policy limits are now enforced by the explicitly armed manual Practice execution engine. Multi-account policies remain saved drafts; they cannot execute. Saving policies disarms new entries and cancels the working entry remainder when reconciled, while preserving management of already filled exposure under its saved policy. Account grants and local approval are separate. A referenced policy cannot be deleted until reassigned. See [manual execution](manual-execution.md).
+Automatic profiles can execute every selected target independently, up to 20 accounts per manager. Each running account belongs to one profile; distinct profiles run concurrently on distinct accounts. Multi-account policies require per-trade-only risk. Saving a referenced policy pauses affected profiles and requires confirmation of their changed setup; management of existing exposure retains its captured policy. A referenced policy cannot be deleted until reassigned.
+
+Use **Execution runners** for global Pause/Resume and confirmed flatten-all, per-account status/control, shared user-stream health and per-target acceptance timing. Global Resume never starts profiles. Profile Start uses its own saved setup; Practice execution is only for manual API tickets. See [automatic execution](automatic-execution.md) for the full workflow and visible limits.
 
 ## Direct webhook addresses
 
@@ -93,7 +95,7 @@ The complete generated URL is visible on the automation list and at the top of e
 
 ## Manual execution test
 
-Use **Practice execution** in the sidebar for Market Order / Limit Order buttons, exact contract quantity and stop/target ticks. Preview calculates risk without trading; password-confirmed approval is a separate action. Fresh account state and quotes, a confirmed fixed floor, Auto OCO and verified ordinary-session hours are mandatory. [Full setup and failure procedures](manual-execution.md).
+Use **Practice execution** in the sidebar for Market Order / Limit Order buttons, exact contract quantity and stop/target ticks. Preview calculates risk without trading; password-confirmed approval is a separate action. Fresh account state and quotes, a confirmed fixed floor only for legacy policies, Auto OCO and verified ordinary-session hours are mandatory. [Full setup and failure procedures](manual-execution.md).
 
 ## Shared or separate Buy/Sell field mappings
 

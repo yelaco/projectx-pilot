@@ -6,7 +6,7 @@ Per-contract planned risk = stop ticks × authoritative tick value + estimated r
 
 A per-trade-only policy does **not** require a manual account floor and does **not** calculate or enforce Topstep MLL, liquidation distance, a cumulative daily loss limit or a trade-count limit. No artificial floor is inferred from account balance. The broker/platform still enforces its own restrictions; `canTrade=false` blocks entries. This is an explicit reduction in bot-level risk controls requested by the operator, not automatic MLL discovery.
 
-Every entry requires a fresh eligible PRAC simulated account, verified session, authoritative contract metadata, current quote, valid stop/target, fee/slippage reserves, local Start/arming and a flat account without working orders. One active execution, durable intent/signal claims and protection checks remain mandatory. No adding to positions, averaging down, martingale, unprotected entry or multi-account execution is implemented. Scheduled flattening and emergency protection failure handling remain active.
+Every entry requires a fresh eligible simulated Practice/Combine/Express Funded account for automation (PRAC only for manual tests), verified session, authoritative contract metadata, current quote, valid stop/target, fee/slippage reserves, local Start/arming and a flat account without working orders. One active execution per account, durable intent/signal claims and protection checks remain mandatory. No adding to positions, averaging down, martingale, unprotected entry is implemented. Multi-account execution applies this policy independently to every target. Scheduled flattening and emergency protection failure handling remain active.
 
 ## Existing profiles and recovery
 
@@ -21,3 +21,7 @@ The signal-to-market deviation guard is optional through an authenticated execut
 New entries also pass the default [US FOMC meeting-day filter](news-filter.md).
 It blocks US FOMC policy-event trading sessions identified by Forex Factory; it is not an economic
 calendar covering other releases. Existing position management remains active.
+
+## Concurrent account budgets
+
+A Trade Manager may route to up to 20 explicit accounts. The planned risk ceiling applies separately to each account, so a $150 manager with four targets can plan up to $600 across that signal. There is no aggregate portfolio budget for per-trade-only policies. Each account must be flat and have no other working/uncertain intent. One profile owns each running account. Legacy fixed-floor managers remain single-account: one manually confirmed floor cannot safely represent several balances. A target that fails risk/eligibility is blocked independently, without rolling back accepted targets. Full target claims and original policies remain durable across configuration changes.

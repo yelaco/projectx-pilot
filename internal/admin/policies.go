@@ -92,11 +92,11 @@ func (p Policies) Validate() error {
 				return errors.New(prefix + "choose TradingView alerts as the signal source in General.")
 			}
 			if a.TradeManagerID == "" {
-				return errors.New(prefix + "assign a single-account Trade Manager; a direct account assignment is not enough.")
+				return errors.New(prefix + "assign a Trade Manager with explicit target accounts.")
 			}
 			manager, ok := managers[a.TradeManagerID]
-			if !ok || manager.Routing != "single" {
-				return errors.New(prefix + "the assigned Trade Manager must use single-account routing.")
+			if !ok || len(manager.AccountIDs) == 0 {
+				return errors.New(prefix + "the assigned Trade Manager needs explicit account targets.")
 			}
 			if strings.TrimSpace(a.ContractID) == "" {
 				return errors.New(prefix + "select an execution contract expiry.")
@@ -178,6 +178,7 @@ func (m *Manager) savePolicies(p Policies) error {
 	if err := p.Validate(); err != nil {
 		return err
 	}
+	m.pauseChangedProfiles(p)
 	b, err := json.MarshalIndent(p, "", "  ")
 	if err != nil {
 		return err

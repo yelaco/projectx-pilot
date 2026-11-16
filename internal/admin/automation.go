@@ -71,6 +71,37 @@ func (m *Manager) automationResultsLocked() ([]storage.AutomationReceipt, error)
 		}
 		rows[n].State, rows[n].Message = state, message
 	}
+
+	jobs, err := m.executionStore.TargetJobs()
+	if err != nil {
+		return nil, err
+	}
+	grouped := map[string][]storage.TargetJob{}
+	order := []string{}
+	for _, j := range jobs {
+		if _, ok := grouped[j.DeliveryID]; !ok {
+			order = append(order, j.DeliveryID)
+		}
+		grouped[j.DeliveryID] = append(grouped[j.DeliveryID], j)
+	}
+	for _, id := range order {
+		list := grouped[id]
+		counts := map[string]int{}
+		for _, j := range list {
+			counts[j.State]++
+		}
+		state := "blocked"
+		if counts["submitted"] == len(list) {
+			state = "submitted"
+		} else if counts["uncertain"] > 0 {
+			state = "uncertain"
+		} else if counts["submitted"] > 0 {
+			state = "partial"
+		} else if counts["claimed"] > 0 {
+			state = "processing"
+		}
+		rows = append(rows, storage.AutomationReceipt{ID: id, ProfileID: list[0].ProfileID, AccountID: "multiple", ContractID: list[0].ContractID, State: state, Message: fmt.Sprintf("Account targets: %d accepted, %d blocked, %d uncertain, %d processing. Inspect Execution runners.", counts["submitted"], counts["blocked"]+counts["interrupted"], counts["uncertain"], counts["claimed"]), UpdatedAt: list[0].FinishedAt.Format(time.RFC3339Nano)})
+	}
 	return rows, nil
 }
 func (m *Manager) RunAutomation(ctx context.Context) {
@@ -83,20 +114,17 @@ func (m *Manager) RunAutomation(ctx context.Context) {
 		case <-timer.C:
 		case <-m.automationWake:
 		}
-		err := m.processAutomation(ctx)
+		err := m.processFleet(ctx)
 		if err != nil {
 			if ctx.Err() != nil {
 				return
 			}
 			m.executor.Pause()
+			_ = m.fleet.PauseAll(true)
 			m.executor.SetRunMessage("Dispatch error: " + err.Error())
 			m.Note("ERROR", "automation", "Automatic dispatch paused: "+err.Error())
 		}
-		delay := 5 * time.Second
-		status := m.executor.Status()
-		if status.RunRequested || status.Armed && status.Automated {
-			delay = time.Second
-		}
+		delay := 30 * time.Second
 		timer.Reset(delay)
 	}
 }
@@ -229,10 +257,10 @@ func (m *Manager) UpdateAutomationExecution(id, mode, contract, orderType string
 					for _, manager := range p.TradeManagers {
 						if manager.ID == selected {
 							found = true
-							if manager.Routing != "single" {
-								return errors.New("choose a Trade Manager with single-account routing")
+							p.Automations[n].AccountID = 0
+							if manager.Routing == "single" {
+								p.Automations[n].AccountID = manager.AccountIDs[0]
 							}
-							p.Automations[n].AccountID = manager.AccountIDs[0]
 						}
 					}
 					if !found {
@@ -271,4 +299,11 @@ func (m *Manager) finishDeliveryLocked(remote *storage.Inbox, id, state string) 
 		return err
 	}
 	return nil
+}
+
+func (m *Manager) WakeAutomation() {
+	select {
+	case m.automationWake <- struct{}{}:
+	default:
+	}
 }

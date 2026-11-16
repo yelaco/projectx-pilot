@@ -16,6 +16,8 @@ func (e *Engine) Run(ctx context.Context) {
 	e.ctx = ctx
 	e.runRequested = false
 	e.disarm()
+	e.publishLocked()
+	close(e.ready)
 	e.mu.Unlock()
 	defer func() {
 		e.mu.Lock()
@@ -57,6 +59,10 @@ func (e *Engine) Run(ctx context.Context) {
 		if e.active() != nil {
 			delay = 2 * time.Second
 		}
+		if e.monitorInterval != nil && e.active() != nil {
+			delay = e.monitorInterval()
+		}
+		e.publishLocked()
 		e.mu.Unlock()
 		timer.Reset(delay)
 	}
@@ -219,9 +225,12 @@ func (e *Engine) reconcile(ctx context.Context, i *Intent) error {
 	if err != nil {
 		return errors.New("account eligibility unavailable; entries paused")
 	}
-	trades, err := e.api.Trades(ctx, i.AccountID, i.Window.StartOfSession(), e.now().UTC())
-	if err != nil {
-		return errors.New("session history unavailable; entries paused")
+	var trades []projectx.Trade
+	if !i.Policy.PerTradeOnly {
+		trades, err = e.api.Trades(ctx, i.AccountID, i.Window.StartOfSession(), e.now().UTC())
+		if err != nil {
+			return errors.New("session history unavailable; entries paused")
+		}
 	}
 	loss := 0.0
 	if !i.Policy.PerTradeOnly {

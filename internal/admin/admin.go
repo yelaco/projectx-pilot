@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"projectxbot/internal/tunnel"
@@ -17,9 +18,11 @@ import (
 	"projectxbot/internal/app"
 	"projectxbot/internal/config"
 	"projectxbot/internal/execution"
+	"projectxbot/internal/fleet"
 	"projectxbot/internal/ingress"
 	"projectxbot/internal/news"
 	"projectxbot/internal/projectx"
+	"projectxbot/internal/realtime"
 	"projectxbot/internal/storage"
 )
 
@@ -42,6 +45,14 @@ type Update struct {
 	ClearCredentials bool
 }
 type Manager struct {
+	userHub                     *realtime.UserHub
+	fleet                       *fleet.Fleet
+	profileSetups               map[string]fleet.Plan
+	clientMu                    sync.Mutex
+	apiClient                   *projectx.Client
+	quotePool                   *realtime.Pool
+	clientOwner                 credentials
+	governor                    *projectx.Governor
 	news                        *news.Calendar
 	continuousRetryAt           time.Time
 	now                         func() time.Time
@@ -148,6 +159,10 @@ func Open(c config.Config, configPath, stateDir string) (*Manager, string, error
 	if err := m.openExecution(); err != nil {
 		return nil, "", err
 	}
+	m.userHub = realtime.NewUserHub(m.userToken, func(id int64) { m.fleet.WakeAccount(id) })
+	if err := m.initFleet(); err != nil {
+		return nil, "", err
+	}
 	return m, token, nil
 }
 func (m *Manager) Reader() (app.Reader, error) {
@@ -159,7 +174,8 @@ func (m *Manager) reader() (app.Reader, error) {
 	if m.credentials.APIKey == "" {
 		return nil, nil
 	}
-	return projectx.New(m.credentials.Username, m.credentials.APIKey, m.c.RequestTimeout)
+	_ = m.executionFactory()
+	return m.apiClient, nil
 }
 func (m *Manager) Attach(s *app.Service) { m.mu.Lock(); defer m.mu.Unlock(); m.service = s }
 func (m *Manager) Settings() Settings {
@@ -176,6 +192,20 @@ func (m *Manager) Save(u Update) error {
 		m.executor.Pause()
 		if !m.executor.CanConfigure() {
 			return errors.New("cannot change connection settings while execution needs monitoring")
+		}
+	}
+	if m.fleet != nil {
+		_ = m.fleet.PauseAll(false)
+		views, _ := m.fleet.Snapshot()
+		for _, v := range views {
+			if v.Busy {
+				return errors.New("account runner is finishing a delivery; connection changes denied")
+			}
+			for _, i := range v.Status.Intents {
+				if i.State != "closed" && i.State != "cancelled" && i.State != "rejected" {
+					return fmt.Errorf("account #%d requires monitoring; connection changes denied", v.AccountID)
+				}
+			}
 		}
 	}
 	if u.RefreshSeconds < 30 || u.RefreshSeconds > 3600 {
@@ -234,6 +264,11 @@ func (m *Manager) Save(u Update) error {
 	}
 	m.c = next
 	m.credentials = creds
+	if m.fleet != nil {
+		_ = m.fleet.PauseAll(false)
+		m.fleet.SetFactory(m.executionFactory())
+		m.userHub.Reconnect()
+	}
 	if m.executor != nil {
 		if err := m.executor.SetFactory(m.executionFactory()); err != nil {
 			return err
@@ -256,6 +291,9 @@ func (m *Manager) Access() *access.Store { return m.access }
 func (m *Manager) ChangeAccess(actor, current, action, target, username, password string) error {
 	if err := m.access.Change(actor, current, action, target, username, password); err != nil {
 		return err
+	}
+	if m.fleet != nil {
+		_ = m.fleet.PauseAll(false)
 	}
 	if m.executor != nil {
 		m.executor.Pause()

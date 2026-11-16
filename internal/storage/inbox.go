@@ -145,6 +145,14 @@ func (s *Inbox) Insert(r Record) error {
 		return errors.New("signal inbox is full; review or reject pending signals first")
 	}
 	at := s.now().UTC().Format(time.RFC3339Nano)
+	// Receipt timestamps are assigned by our HTTP receiver, never by alert JSON.
+	if r.ReceivedAt != "" {
+		received, parseErr := time.Parse(time.RFC3339Nano, r.ReceivedAt)
+		if parseErr != nil {
+			return errors.New("invalid local receipt timestamp")
+		}
+		at = received.UTC().Format(time.RFC3339Nano)
+	}
 	if err = s.write("INSERT INTO signals VALUES(?,?,?,?,?,'pending_review',?)", r.Signal.ID, string(b), r.ProfileID, r.ContractID, r.AccountID, at); err != nil {
 		return err
 	}

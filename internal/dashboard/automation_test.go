@@ -85,7 +85,7 @@ func TestAutomaticRoutingFailurePreservesFieldsAndCanAssignManager(t *testing.T)
 	csrf := formCSRF(t, requestAs(h, "local", password, "GET", "/automations/profiles/swift?tab=execution", nil))
 	values := url.Values{"csrf": {csrf}, "id": {"swift"}, "execution_mode": {"automatic"}, "contract_id": {"mnq-contract"}, "order_type": {"limit"}, "trade_manager_id": {""}}
 	w := requestAs(h, "local", password, "POST", "/automation-execution", values)
-	if w.Code != 400 || !strings.Contains(w.Body.String(), "assign a single-account Trade Manager") || !strings.Contains(w.Body.String(), `value="automatic" selected`) || !strings.Contains(w.Body.String(), `value="limit" selected`) {
+	if w.Code != 400 || !strings.Contains(w.Body.String(), "assign a Trade Manager") || !strings.Contains(w.Body.String(), `value="automatic" selected`) || !strings.Contains(w.Body.String(), `value="limit" selected`) {
 		t.Fatal("lost routing selection or missing diagnostic", w.Code, w.Body.String())
 	}
 	if !strings.Contains(w.Body.String(), `value="mnq-contract" selected`) {

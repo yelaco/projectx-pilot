@@ -155,7 +155,7 @@ func handleProfileExecution(r *http.Request, m *admin.Manager, actor string) err
 	id, password := r.PostForm.Get("id"), r.PostForm.Get("current_password")
 	switch r.URL.Path {
 	case "/automation-start":
-		return m.StartContinuousAutomation(r.Context(), id)
+		return m.StartProfile(r.Context(), id)
 	case "/automation-setup":
 		c, err := executionSettingsForm(r)
 		if err != nil {
@@ -166,23 +166,20 @@ func handleProfileExecution(r *http.Request, m *admin.Manager, actor string) err
 			return errors.New("enter the verified fixed account loss floor")
 		}
 		yes := r.PostForm.Get("setup_confirmed") == "yes"
-		return m.SaveContinuousSetup(actor, password, id, c, c.Enabled, execution.Authorization{Floor: floor, Window: session.Window{Verified: yes}, PracticeConfirmed: yes, BracketsConfirmed: yes, FloorConfirmed: yes})
+		return m.SaveProfileSetup(actor, password, id, c, c.Enabled, execution.Authorization{Floor: floor, Window: session.Window{Verified: yes}, PracticeConfirmed: yes, BracketsConfirmed: yes, FloorConfirmed: yes})
 	case "/automation-settings":
-		c, err := executionSettingsForm(r)
-		if err != nil {
-			return err
-		}
-		return m.SaveProfileExecution(actor, password, id, c, r.PostForm.Get("allowed") == "yes")
+		return errors.New("legacy automatic settings are retired; use this profile’s trading setup")
 	case "/automation-arm":
 		a, err := executionAuthorizationForm(r)
 		if err != nil {
 			return err
 		}
-		return m.ArmProfileAutomation(r.Context(), actor, password, id, a)
+		_ = a
+		return errors.New("legacy automatic arming is retired; save trading setup and use Start on the profile")
 	case "/automation-pause":
-		return m.PauseProfileAutomation(id)
+		return m.PauseProfile(id)
 	case "/automation-flatten":
-		return m.FlattenProfileAutomation(r.Context(), actor, password, id)
+		return m.FlattenProfile(r.Context(), actor, password, id)
 	}
 	return errors.New("unknown profile execution action")
 }

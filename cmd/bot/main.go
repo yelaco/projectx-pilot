@@ -16,6 +16,7 @@ import (
 	"projectxbot/internal/app"
 	"projectxbot/internal/config"
 	"projectxbot/internal/dashboard"
+	"projectxbot/internal/notify"
 	"projectxbot/internal/observability"
 	"projectxbot/internal/storage"
 	"projectxbot/internal/tunnel"
@@ -61,6 +62,14 @@ func run() error {
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
+	inboxWake, err := notify.Listen(filepath.Join(*stateDir, "inbox.sock"))
+	if err != nil {
+		return err
+	}
+	defer inboxWake.Close()
+	wakeDone := make(chan struct{})
+	go func() { defer close(wakeDone); inboxWake.Run(ctx, manager.WakeAutomation) }()
+	defer func() { cancel(); inboxWake.Close(); <-wakeDone }()
 	tunnelController := tunnel.New(manager.RoutingStore(), audit)
 	manager.AttachTunnelWake(tunnelController.Wake)
 	manager.AttachTunnelStatus(tunnelController.Status)
@@ -75,6 +84,12 @@ func run() error {
 	executionDone := make(chan struct{})
 	go func() { defer close(executionDone); manager.RunExecution(ctx) }()
 	defer func() { cancel(); <-executionDone }()
+	if err := manager.WaitRuntime(ctx); err != nil {
+		return err
+	}
+	userDone := make(chan struct{})
+	go func() { defer close(userDone); manager.RunUserData(ctx) }()
+	defer func() { cancel(); <-userDone }()
 	automationDone := make(chan struct{})
 	go func() { defer close(automationDone); manager.RunAutomation(ctx) }()
 	defer func() { cancel(); <-automationDone }()

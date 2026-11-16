@@ -64,7 +64,7 @@ function renderConnectionLog(rows) {
   if (!body.children.length) { const tr = document.createElement('tr'); const td = document.createElement('td'); td.colSpan = 4; td.className = 'empty'; td.textContent = 'No webhook or tunnel events yet. Enable the preset or send an alert to start.'; tr.appendChild(td); body.appendChild(tr); }
   filterConnectionLog();
 }
-const monitorInterval = document.querySelector('#connection-log-rows, [data-monitor="execution-state"], [data-profile-arming]') ? 3000 : 10000;
+const monitorInterval = document.querySelector('#connection-log-rows, [data-monitor="execution-state"], [data-profile-arming], #target-job-rows') ? 3000 : 10000;
 async function monitor() {
   if (!document.hidden) {
     try {
@@ -74,12 +74,13 @@ async function monitor() {
       put('execution-state', v.Execution?.State || 'idle');
       put('execution-mode', v.Execution?.RunRequested ? 'Automation running' : v.Execution?.Armed ? (v.Execution?.Automated ? 'Automatic trading active' : 'Manual trading active') : v.Execution?.Configured ? 'Execution configured · paused' : 'Read-only mode');
       document.querySelectorAll('[data-profile-arming]').forEach(node => {
-        const running = v.Execution?.RunRequested && v.Execution?.RunProfileID === node.dataset.profileArming;
-        const active = v.Execution?.Armed && v.Execution?.Automated && v.Execution?.AutomationProfileID === node.dataset.profileArming;
-        const reason = v.Execution?.RunProfileID === node.dataset.profileArming ? v.Execution.RunMessage : '';
-        const otherRun = v.Execution?.RunRequested && v.Execution.RunProfileID !== node.dataset.profileArming;
-        const otherArmed = v.Execution?.Armed && v.Execution.Automated && !active;
-        node.textContent = running ? v.Execution.RunMessage : active ? 'Session active' : otherRun ? 'Blocked · automation ' + v.Execution.RunProfileID + ' is running' : otherArmed ? 'Blocked · automation ' + v.Execution.AutomationProfileID + ' is armed' : v.Execution?.Armed && !v.Execution.Automated ? 'Paused · manual Practice session armed' : reason && reason !== 'Paused' ? 'Paused · ' + reason : 'Paused';
+        const state = v.Profiles ? (v.Profiles[node.dataset.profileArming] || {}) : v.Execution;
+        const running = state?.RunRequested && state?.RunProfileID === node.dataset.profileArming;
+        const active = state?.Armed && state?.Automated && state?.AutomationProfileID === node.dataset.profileArming;
+        const reason = state?.RunProfileID === node.dataset.profileArming ? state.RunMessage : '';
+        const otherRun = state?.RunRequested && state.RunProfileID !== node.dataset.profileArming;
+        const otherArmed = state?.Armed && state.Automated && !active;
+        node.textContent = running ? state.RunMessage : active ? 'Session active' : otherRun ? 'Blocked · automation ' + state.RunProfileID + ' is running' : otherArmed ? 'Blocked · automation ' + state.AutomationProfileID + ' is armed' : state?.Armed && !state.Automated ? 'Paused · manual Practice session armed' : reason && reason !== 'Paused' ? 'Paused · ' + reason : 'Paused';
         document.querySelectorAll('[data-profile-start]').forEach(form => { if (form.dataset.profileStart === node.dataset.profileArming) form.hidden = running; });
         document.querySelectorAll('[data-profile-pause]').forEach(form => { if (form.dataset.profilePause === node.dataset.profileArming) form.hidden = !running && !active; });
       });
@@ -94,6 +95,31 @@ async function monitor() {
         if (!outcomes.children.length) outcomes.textContent = 'No automatic alerts processed.';
       }
  put('execution-exposure', (v.Execution?.Orders || 0) + ' / ' + (v.Execution?.Positions || 0));
+ const gate = document.querySelector('[data-global-gate]');
+ if (gate) gate.textContent = v.GlobalPaused ? 'Global pause active' : 'Global entry gate open';
+ const userStream = document.querySelector('[data-user-stream]');
+ if (userStream) userStream.textContent = (v.UserData?.State || 'Unavailable') + ' · ' + (v.UserData?.Accounts || 0) + ' subscribed accounts';
+ for (const runner of v.Runners || []) {
+   const row = document.querySelector('[data-runner="' + runner.AccountID + '"]');
+   if (!row) continue;
+   const status = runner.Status || {};
+   const state = row.querySelector('[data-runner-state]');
+   if (state) state.textContent = (runner.Busy ? 'Processing delivery' : status.Armed ? 'Armed' : status.RunRequested ? 'Waiting' : 'Paused / recovery') + ' · ' + (status.RunMessage || '');
+   const management = row.querySelector('[data-runner-management]');
+   if (management) management.textContent = [status.Error || '', status.SubmissionDetail?.Reason ? 'ProjectX rejection reason: ' + status.SubmissionDetail.Reason : '', ...(status.Intents || []).filter(i => !['closed','cancelled','rejected'].includes(i.State)).map(i => (i.Signal?.symbol || '') + ' ' + i.State + ' · order #' + i.OrderID + ' · ' + i.Message)].join(' ');
+ }
+ const targets = document.querySelector('#target-job-rows');
+ if (targets) {
+   targets.replaceChildren();
+   const duration = (a,b) => !a || !b || a.startsWith('0001') || b.startsWith('0001') ? '—' : (Date.parse(b)-Date.parse(a)).toFixed(1) + ' ms';
+   for (const job of (v.TargetJobs || []).slice(0,100)) {
+     const tr = document.createElement('tr');
+     for (const value of [job.DeliveryID + ' / ' + job.ProfileID, '#' + job.AccountID, job.State + ' · ' + job.Message, duration(job.ReceivedAt,job.DispatchedAt),duration(job.ChecksAt,job.SubmitAt),duration(job.SubmitAt,job.AcceptedAt),duration(job.ReceivedAt,job.AcceptedAt)]) {
+       const td = document.createElement('td');td.textContent=value;tr.appendChild(td);
+     }
+     targets.appendChild(tr);
+   }
+ }
  put('execution-observed', v.Execution?.ObservedAt || 'Not observed');
  put('execution-message', v.Execution?.Message || '');
  document.querySelectorAll('[data-submission-reason]').forEach(node => { const detail=v.Execution?.SubmissionDetail; node.textContent=detail?.IntentID===node.dataset.submissionReason ? 'ProjectX rejection reason: ' + detail.Reason : ''; });

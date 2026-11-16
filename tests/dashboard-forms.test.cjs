@@ -144,3 +144,30 @@ test('webhook controls use canonical server URLs and clear removed profiles', as
   assert.equal(buttons[1].disabled, false);
   assert.equal(buttons[2].disabled, true);
 });
+
+test('independent profile status never inherits another profile block', async () => {
+ const nodes=['a','b'].map(id=>({dataset:{profileArming:id},textContent:''}));
+ const document={hidden:false,querySelector(){return null},querySelectorAll(s){return s==='[data-profile-arming]'?nodes:[]},addEventListener(){}};
+ const payload={State:{},Tunnel:{},Execution:{RunRequested:true,RunProfileID:'a'},Profiles:{a:{RunRequested:true,RunProfileID:'a',RunMessage:'A running'},b:{RunRequested:true,RunProfileID:'b',RunMessage:'B running'}}};
+ const context={document,fetch:async()=>({ok:true,json:async()=>payload}),setTimeout(){}};
+ runInNewContext(script,context);await context.monitor();
+ assert.equal(nodes[0].textContent,'A running');assert.equal(nodes[1].textContent,'B running');
+ delete payload.Profiles.b;await context.monitor();assert.equal(nodes[1].textContent,'Paused');
+});
+
+test('account runner monitor renders safe lifecycle text and measured acceptance',async()=>{
+ const state={textContent:''},management={textContent:''},stream={textContent:''},gate={textContent:''};
+ const tbody={children:[],replaceChildren(){this.children=[]},appendChild(n){this.children.push(n)}};
+ const document={hidden:false,addEventListener(){},querySelectorAll(){return []},createElement(){return {children:[],appendChild(n){this.children.push(n)},textContent:''}},querySelector(s){
+  if(s==='[data-runner="42"]')return {querySelector(k){return k==='[data-runner-state]'?state:management}};
+  if(s==='[data-user-stream]')return stream;if(s==='[data-global-gate]')return gate;if(s==='#target-job-rows')return tbody;return null;
+ }};
+ const at='2026-11-13T15:00:00.000Z',accepted='2026-11-13T15:00:00.125Z';
+ const payload={State:{},Tunnel:{},GlobalPaused:true,UserData:{State:'subscribed',Accounts:2},Runners:[{AccountID:42,Status:{Armed:true,RunMessage:'Ready',Intents:[{State:'protected',Signal:{symbol:'MNQ'},OrderID:7,Message:'<script>literal text</script>'}]}}],TargetJobs:[{DeliveryID:'one',ProfileID:'a',AccountID:42,State:'submitted',Message:'Accepted',ReceivedAt:at,DispatchedAt:at,ChecksAt:at,SubmitAt:at,AcceptedAt:accepted}]};
+ const context={document,fetch:async()=>({ok:true,json:async()=>payload}),setTimeout(){},Date};
+ runInNewContext(script,context);await context.monitor();
+ assert.match(state.textContent,/Armed/);assert.match(management.textContent,/MNQ protected · order #7/);
+ assert.match(management.textContent,/<script>literal text<\/script>/);
+ assert.equal(gate.textContent,'Global pause active');assert.match(stream.textContent,/2 subscribed accounts/);
+ assert.equal(tbody.children[0].children[6].textContent,'125.0 ms');
+});

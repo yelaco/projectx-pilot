@@ -263,3 +263,37 @@ func TestManagedProfileRotationAndDisable(t *testing.T) {
 		t.Fatal("deleted profile still works", got)
 	}
 }
+
+func TestWakeOnlyAfterNewDurableReceipt(t *testing.T) {
+	store, err := storage.Open(filepath.Join(t.TempDir(), "remote.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	now := time.Now().UTC()
+	token := strings.Repeat("x", 64)
+	wakes := 0
+	h, err := New(store, Options{Enabled: true, Token: token, MaxAge: time.Minute, Now: func() time.Time { return now }, AfterStore: func() {
+		wakes++
+		got, readErr := store.Get("swift-001")
+		if readErr != nil || got.ReceivedAt != now.Format(time.RFC3339Nano) {
+			t.Error("notified before durable receipt", readErr)
+		}
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := envelope(token, alert(now))
+	if w := send(h, body); w.Code != 202 {
+		t.Fatal(w.Code)
+	}
+	if w := send(h, body); w.Code != 200 {
+		t.Fatal(w.Code)
+	}
+	if w := send(h, envelope("wrong", alert(now))); w.Code != 401 {
+		t.Fatal(w.Code)
+	}
+	if wakes != 1 {
+		t.Fatal("duplicate/rejected notification", wakes)
+	}
+}

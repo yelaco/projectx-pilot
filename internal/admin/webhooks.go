@@ -43,6 +43,9 @@ func (m *Manager) SaveIngress(enabled, quick bool, publicURL string) error {
 	if !ingress.PublicURL(publicURL) {
 		return errors.New("public URL must be an HTTPS origin without credentials, path, query or fragment")
 	}
+	if m.fleet != nil {
+		_ = m.fleet.PauseAll(false)
+	}
 	if m.executor != nil {
 		m.executor.Pause()
 	}
@@ -77,6 +80,9 @@ func (m *Manager) SaveMappings(id, mode string, shared, buy, sell ingress.PriceM
 	}
 	if mode == "shared" && !valid(shared) || mode == "separate" && (!valid(buy) || !valid(sell)) {
 		return errors.New("each active mapping needs a verified entry placeholder; use verified TradingView price placeholders and leave unknown stop/target mappings empty")
+	}
+	if m.fleet != nil {
+		m.fleet.PauseProfile(id)
 	}
 	if m.executor != nil {
 		m.executor.Pause()

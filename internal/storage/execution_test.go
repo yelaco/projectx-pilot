@@ -146,12 +146,12 @@ func TestOCOReviewClearsOnlyMatchingClosedFaultAndKeepsClaims(t *testing.T) {
 	if err = s.ResolveOneWayOCOLock("42", row.Session, row.ID, "daily loss limit reached"); err == nil {
 		t.Fatal("loss lock can be reviewed")
 	}
-	active := ExecRow{ID: "active", Account: "44", Session: row.Session, State: "uncertain", Payload: "unresolved"}
+	active := ExecRow{ID: "active", Account: "42", Session: row.Session, State: "uncertain", Payload: "unresolved"}
 	if err = s.ReserveExecution(active); err != nil {
 		t.Fatal(err)
 	}
 	if err = s.ResolveOneWayOCOLock("42", row.Session, row.ID, reason); err == nil {
-		t.Fatal("unlocked over another unresolved intent")
+		t.Fatal("unlocked over an unresolved intent on the same account")
 	}
 	if got, _ := s.ExecutionLock("42", row.Session); got != reason {
 		t.Fatal("failed review erased lock")

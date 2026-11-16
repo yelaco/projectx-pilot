@@ -78,6 +78,7 @@ type Authorization struct {
 	AccountName       string
 }
 type Intent struct {
+	Timing             Timing
 	HaltReason         string           `json:",omitempty"`
 	HaltOrders         []projectx.Order `json:",omitempty"`
 	SubmissionFailure  string           `json:",omitempty"`

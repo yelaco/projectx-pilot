@@ -19,6 +19,7 @@ const legacyOCOLock = "protective orders missing, pending or inconsistent"
 func (e *Engine) ReviewOneWayOCOLock(ctx context.Context, account int64, intentID string) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	defer e.publishLocked()
 	if e.ctx == nil || e.ctx.Err() != nil {
 		return errors.New("execution monitor must be running for local lock review")
 	}

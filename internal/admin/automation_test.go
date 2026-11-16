@@ -100,7 +100,7 @@ func TestExistingTradeManagerMustBeAssignedToAutomaticProfile(t *testing.T) {
 		t.Fatal(err)
 	}
 	err := m.UpdateAutomationExecution("swift", "automatic", "mnq", "market")
-	if err == nil || !strings.Contains(err.Error(), "assign a single-account Trade Manager") {
+	if err == nil || !strings.Contains(err.Error(), "assign a Trade Manager") {
 		t.Fatal("existing unassigned manager was treated as assigned", err)
 	}
 	if m.Policies().Automations[0].ExecutionMode != "" {

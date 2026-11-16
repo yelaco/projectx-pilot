@@ -11,6 +11,8 @@ import (
 
 func pageInfo(path string) (name, nav, title, subtitle string) {
 	switch path {
+	case "/runners":
+		return "runners", "runners", "Execution runners", "Account ownership, global controls, and signal-to-acceptance results."
 	case "/operation-days":
 		return "operation-days", "operation-days", "Operation days", "Plan Saturday–Friday trading weeks in America/Chicago."
 	case "/execution":
@@ -58,6 +60,8 @@ func actionPage(path, id string) string {
 		return "/execution"
 	}
 	switch path {
+	case "/fleet/review-oco", "/fleet/pause", "/fleet/resume", "/fleet/flatten", "/fleet/account-pause", "/fleet/account-flatten":
+		return "/runners"
 	case "/operation-days", "/news-refresh":
 		return "/operation-days"
 	case "/trade-manager":

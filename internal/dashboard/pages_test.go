@@ -51,7 +51,7 @@ func TestFocusedPagesAndProfileSecretIsolation(t *testing.T) {
 	}
 	cases := []struct{ path, want string }{
 		{"/", "System overview"}, {"/automations", "Automation profiles"}, {"/automations/new", "Create an automation profile"},
-		{"/accounts", "Execution permissions"}, {"/contracts", "Available contracts"}, {"/deliveries", "TradingView deliveries"},
+		{"/runners", "Per-account delivery results"}, {"/accounts", "Execution permissions"}, {"/contracts", "Available contracts"}, {"/deliveries", "TradingView deliveries"},
 		{"/signals", "Signal inbox"}, {"/activity", "Operational events"}, {"/settings", "Save settings"}, {"/settings/webhooks", "Apply webhook settings"},
 		{"/automations/profiles/first", "Profile configuration"}, {"/automations/profiles/new", "Profile new"},
 	}

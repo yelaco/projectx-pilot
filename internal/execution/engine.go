@@ -21,6 +21,9 @@ import (
 )
 
 type Engine struct {
+	ready                    chan struct{}
+	observer                 func(Status)
+	monitorInterval          func() time.Duration
 	newsCalendar             NewsCalendar
 	managerOperationDays     map[string][]string
 	operationDays            []string
@@ -54,7 +57,7 @@ func New(store Store, factory Factory, audit ...func(string, string)) (*Engine, 
 	if err != nil {
 		return nil, err
 	}
-	e := &Engine{store: store, factory: factory, wake: make(chan struct{}, 1), now: time.Now, lastAudit: map[string]string{}}
+	e := &Engine{ready: make(chan struct{}), store: store, factory: factory, wake: make(chan struct{}, 1), now: time.Now, lastAudit: map[string]string{}}
 	if len(audit) > 0 {
 		e.audit = audit[0]
 	}
@@ -82,6 +85,7 @@ func (e *Engine) CanConfigure() bool { e.mu.Lock(); defer e.mu.Unlock(); return 
 func (e *Engine) SetFactory(f Factory) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	defer e.publishLocked()
 	if e.active() != nil {
 		return errors.New("cannot change credentials while execution requires monitoring")
 	}
@@ -98,6 +102,7 @@ func (e *Engine) disarm() { e.armedUntil = time.Time{}; e.preview = nil; e.pause
 func (e *Engine) Pause() {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	defer e.publishLocked()
 	e.disarm()
 	e.runRequested = false
 	e.runMessage = "Paused"
@@ -110,6 +115,9 @@ func (e *Engine) Pause() {
 func (e *Engine) Status() Status {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	return e.snapshotLocked()
+}
+func (e *Engine) snapshotLocked() Status {
 	s := Status{RunRequested: e.runRequested, RunProfileID: e.runProfileID, RunMessage: e.runMessage, Automated: e.config.Automated, AutomationProfileID: e.config.AutomationProfileID, ArmedAt: e.armedAt, Enabled: e.config.Enabled, Armed: e.now().Before(e.armedUntil), AccountID: e.config.AccountID, ArmedUntil: e.armedUntil, Error: e.message, Intents: append([]Intent(nil), e.intents...)}
 	if e.submissionDetail != nil {
 		detail := *e.submissionDetail
@@ -143,6 +151,7 @@ func (e *Engine) persist(i *Intent) error {
 		e.audit(level, "Order lifecycle: "+i.State+". "+i.Message)
 		e.lastAudit[i.ID] = i.State + ":" + i.Message
 	}
+	e.publishLocked()
 	return err
 }
 func (e *Engine) lock(i *Intent, why string) {
@@ -181,6 +190,7 @@ func (e *Engine) connect(account int64) error {
 func (e *Engine) Arm(ctx context.Context, c Config, p risk.Profile, a Authorization) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	defer e.publishLocked()
 	if a.Continuous && (!e.runRequested || e.runProfileID != c.AutomationProfileID) {
 		return errors.New("continuous run was paused before session authorization")
 	}
@@ -246,6 +256,15 @@ func (e *Engine) Arm(ctx context.Context, c Config, p risk.Profile, a Authorizat
 	}
 	if len(positions) != 0 || len(orders) != 0 {
 		return errors.New("account must be flat with no working orders before arming")
+	}
+	if c.Automated {
+		metadata, err := e.api.Contract(ctx, c.AutomationContractID)
+		if err != nil {
+			return errors.New("automatic contract metadata unavailable")
+		}
+		if !metadata.ActiveContract {
+			return errors.New("selected contract is not active")
+		}
 	}
 	if p.PerTradeOnly {
 		a.Floor = 0
@@ -324,36 +343,50 @@ func (e *Engine) size(ctx context.Context, s signal.Signal, contract string) (ri
 	if err := e.check(); err != nil {
 		return empty, projectx.Contract{}, err
 	}
-	c, err := e.api.Contract(ctx, contract)
-	if err != nil {
-		return empty, c, err
+	// Independent authoritative reads run concurrently. No order mutation is
+	// allowed until all complete and the normal risk/freshness checks pass.
+	var c projectx.Contract
+	var account projectx.Account
+	var positions []projectx.Position
+	var orders []projectx.Order
+	var accountObservedAt time.Time
+	var readErrors [4]error
+	var reads sync.WaitGroup
+	reads.Add(4)
+	go func() { defer reads.Done(); c, readErrors[0] = e.api.Contract(ctx, contract) }()
+	go func() {
+		defer reads.Done()
+		account, readErrors[1] = e.account(ctx, e.config.AccountID)
+		accountObservedAt = e.now()
+	}()
+	go func() { defer reads.Done(); positions, readErrors[2] = e.api.OpenPositions(ctx, e.config.AccountID) }()
+	go func() { defer reads.Done(); orders, readErrors[3] = e.api.OpenOrders(ctx, e.config.AccountID) }()
+	reads.Wait()
+	for _, err := range readErrors {
+		if err != nil {
+			return empty, c, err
+		}
 	}
 	if !strings.HasSuffix(c.SymbolID, "."+s.Symbol) {
 		return empty, c, errors.New("contract does not match signal symbol")
 	}
-	account, err := e.account(ctx, e.config.AccountID)
-	if err != nil {
-		return empty, c, err
-	}
-	accountObservedAt := e.now()
-	positions, err := e.api.OpenPositions(ctx, e.config.AccountID)
-	if err != nil {
-		return empty, c, err
-	}
-	orders, err := e.api.OpenOrders(ctx, e.config.AccountID)
-	if err != nil {
-		return empty, c, err
-	}
 	if len(positions) != 0 || len(orders) != 0 {
 		return empty, c, errors.New("existing positions or working orders block new entries")
 	}
-	history, err := e.api.Orders(ctx, e.config.AccountID, e.auth.Window.StartOfSession(), e.now().UTC())
-	if err != nil {
-		return empty, c, err
-	}
-	trades, err := e.api.Trades(ctx, e.config.AccountID, e.auth.Window.StartOfSession(), e.now().UTC())
-	if err != nil {
-		return empty, c, err
+	var history []projectx.Order
+	var trades []projectx.Trade
+	var err error
+	// Per-trade-only policies intentionally do not calculate daily P&L/MLL or
+	// trade-count limits. Avoid two irrelevant pre-entry network round trips.
+	if !e.policy.PerTradeOnly {
+		history, err = e.api.Orders(ctx, e.config.AccountID, e.auth.Window.StartOfSession(), e.now().UTC())
+		if err != nil {
+			return empty, c, err
+		}
+		trades, err = e.api.Trades(ctx, e.config.AccountID, e.auth.Window.StartOfSession(), e.now().UTC())
+		if err != nil {
+			return empty, c, err
+		}
 	}
 	loss := 0.0
 	if !e.policy.PerTradeOnly {
@@ -489,19 +522,29 @@ func (e *Engine) Submit(ctx context.Context, token string) error {
 func (e *Engine) ExecuteAutomation(ctx context.Context, profileID string, s signal.Signal, contract string, orderType int) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	defer e.publishLocked()
 	if !e.config.Automated || e.config.AutomationProfileID != profileID || e.config.AutomationContractID != contract || (orderType != 1 && orderType != 2) {
 		return errors.New("alert does not match the locally armed automation")
 	}
 	if s.Timestamp.Before(e.armedAt) {
 		return errors.New("signal predates this arming; historical alerts cannot execute")
 	}
+	if t := timing(ctx); t != nil {
+		t.ChecksStartedAt = e.now().UTC()
+	}
 	plan, c, err := e.size(ctx, s, contract)
+	if t := timing(ctx); t != nil {
+		t.ChecksFinishedAt = e.now().UTC()
+	}
 	if err != nil {
 		return err
 	}
 	return e.place(ctx, &Preview{OrderType: orderType, Signal: s, Contract: c, Plan: plan}, c, plan)
 }
 func (e *Engine) place(ctx context.Context, p *Preview, c projectx.Contract, plan risk.SizingPlan) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	if err := e.check(); err != nil {
 		return err
 	}
@@ -512,6 +555,9 @@ func (e *Engine) place(ctx context.Context, p *Preview, c projectx.Contract, pla
 		profile = e.config.AutomationProfileID
 	}
 	i := Intent{Source: source, ProfileID: profile, OrderType: p.OrderType, ID: p.Signal.ID, AccountID: e.config.AccountID, Session: e.auth.Window.ID(), State: "submitting", Tag: "pxbot-" + randomID(), Signal: p.Signal, Contract: c, Plan: plan, Policy: e.policy, Config: e.config, Window: e.auth.Window, Floor: e.auth.Floor, Created: e.now().UTC(), Updated: e.now().UTC()}
+	if t := timing(ctx); t != nil {
+		i.Timing = *t
+	}
 	b, err := json.Marshal(i)
 	if err != nil {
 		return err
@@ -540,7 +586,17 @@ func (e *Engine) place(ctx context.Context, p *Preview, c projectx.Contract, pla
 	if side == 1 {
 		stopOffset, targetOffset = plan.StopTicks, -plan.TargetTicks
 	}
+	if t := timing(ctx); t != nil {
+		t.SubmittedAt = e.now().UTC()
+		intent.Timing = *t
+	}
 	id, err := e.api.Place(wireCtx, projectx.PlaceRequest{AccountID: i.AccountID, ContractID: c.ID, Type: p.OrderType, Side: side, Size: plan.Quantity, LimitPrice: limit, CustomTag: i.Tag, StopLossBracket: projectx.Bracket{Ticks: stopOffset, Type: 4}, TakeProfitBracket: projectx.Bracket{Ticks: targetOffset, Type: 1}})
+	if err == nil {
+		if t := timing(ctx); t != nil {
+			t.AcceptedAt = e.now().UTC()
+			intent.Timing = *t
+		}
+	}
 	intent.OrderID = id
 	if err != nil {
 		intent.SubmissionFailure = safeSubmissionFailure(err)
@@ -606,11 +662,11 @@ func (e *Engine) TicketSignal(ctx context.Context, strategy, symbol, direction, 
 }
 
 // NewWithClock injects time for deterministic risk/session/recovery tests.
-func NewWithClock(store Store, factory Factory, clock func() time.Time) (*Engine, error) {
+func NewWithClock(store Store, factory Factory, clock func() time.Time, audit ...func(string, string)) (*Engine, error) {
 	if clock == nil {
 		return nil, errors.New("clock required")
 	}
-	e, err := New(store, factory)
+	e, err := New(store, factory, audit...)
 	if err != nil {
 		return nil, err
 	}
@@ -623,6 +679,7 @@ func NewWithClock(store Store, factory Factory, clock func() time.Time) (*Engine
 func (e *Engine) RequestRun(profile string) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	defer e.publishLocked()
 	if e.ctx == nil || e.ctx.Err() != nil {
 		return errors.New("execution monitor is not running")
 	}
@@ -649,6 +706,7 @@ func (e *Engine) RequestRun(profile string) error {
 func (e *Engine) SetRunMessage(message string) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	defer e.publishLocked()
 	e.runMessage = message
 }
 

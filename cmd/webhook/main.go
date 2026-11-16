@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"time"
 
+	"projectxbot/internal/notify"
 	"projectxbot/internal/storage"
 	"projectxbot/internal/webhook"
 )
@@ -54,9 +55,9 @@ func run() error {
 	defer store.Close()
 	var handler http.Handler
 	if *managed != "" {
-		handler, err = webhook.Managed(store, *managed)
+		handler, err = webhook.Managed(store, *managed, func() { notify.Ping(filepath.Join(*state, "inbox.sock")) })
 	} else {
-		handler, err = webhook.New(store, webhook.Options{Enabled: true, Token: os.Getenv("WEBHOOK_DELIVERY_TOKEN"), MaxAge: *age})
+		handler, err = webhook.New(store, webhook.Options{AfterStore: func() { notify.Ping(filepath.Join(*state, "inbox.sock")) }, Enabled: true, Token: os.Getenv("WEBHOOK_DELIVERY_TOKEN"), MaxAge: *age})
 	}
 	if err != nil {
 		return err

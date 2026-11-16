@@ -23,18 +23,34 @@ import (
 
 func (m *Manager) executionFactory() execution.Factory {
 	creds, timeout := m.credentials, m.c.RequestTimeout
+	m.clientMu.Lock()
+	if m.apiClient == nil || m.clientOwner != creds {
+		client, err := projectx.New(creds.Username, creds.APIKey, timeout)
+		if err != nil {
+			m.clientMu.Unlock()
+			return func(int64) (execution.API, execution.Quotes, error) {
+				return nil, nil, errors.New("ProjectX credentials required")
+			}
+		}
+		if m.governor == nil {
+			m.governor = projectx.NewGovernor()
+		}
+		client.SetGovernor(m.governor)
+		m.apiClient = client
+		m.quotePool = realtime.NewPool(client.StreamToken)
+		m.clientOwner = creds
+	}
+	client, pool := m.apiClient, m.quotePool
+	m.clientMu.Unlock()
 	return func(account int64) (execution.API, execution.Quotes, error) {
-		c, err := projectx.New(creds.Username, creds.APIKey, timeout)
+		tr, err := projectx.NewTrading(client, account)
 		if err != nil {
 			return nil, nil, err
 		}
-		t, err := projectx.NewTrading(c, account)
-		if err != nil {
-			return nil, nil, err
-		}
-		return t, realtime.New(c.StreamToken), nil
+		return tr, pool.Handle(), nil
 	}
 }
+
 func (m *Manager) openExecution() error {
 	m.executionConfig = execution.Config{RoundTripCosts: 3, SlippageTicks: 2, MaxQuantity: 1, MaxDeviationTicks: 4}
 	b, err := os.ReadFile(filepath.Join(filepath.Dir(m.credentialsPath), "execution.json"))
@@ -54,7 +70,7 @@ func (m *Manager) openExecution() error {
 		store.Close()
 		return err
 	}
-	engine, err := execution.New(store, m.executionFactory(), executionAudit(audit))
+	engine, err := execution.New(storage.ScopedExecution{Inbox: store, Manual: true}, m.executionFactory(), executionAudit(audit))
 	if err != nil {
 		store.Close()
 		return err
@@ -67,7 +83,7 @@ func (m *Manager) openExecution() error {
 	m.executionStore, m.executor = store, engine
 	return nil
 }
-func (m *Manager) RunExecution(ctx context.Context)  { m.executor.Run(ctx) }
+func (m *Manager) RunExecution(ctx context.Context)  { m.runExecutionFleet(ctx) }
 func (m *Manager) ExecutionStatus() execution.Status { return m.executor.Status() }
 func (m *Manager) ExecutionConfig() execution.Config {
 	m.mu.Lock()
@@ -130,6 +146,9 @@ func (m *Manager) saveExecutionLocked(c execution.Config, profileID string) erro
 	if c.Enabled {
 		next.Mode = "manual-approval"
 	}
+	if len(m.profileSetups) > 0 && m.c.Mode == "automated" {
+		next.Mode = "automated"
+	}
 	// Either interrupted write remains safe: both gates are required when arming.
 	if err = config.Save(m.configPath, next); err != nil {
 		return err
@@ -150,6 +169,17 @@ func (m *Manager) ArmExecution(ctx context.Context, actor, password string, a ex
 	return m.armExecutionLocked(ctx, a)
 }
 func (m *Manager) armExecutionLocked(ctx context.Context, a execution.Authorization) error {
+	if !a.AutomationConfirmed && m.fleet != nil {
+		views, paused := m.fleet.Snapshot()
+		if paused {
+			return errors.New("global pause is active; resume globally before manual arming")
+		}
+		for _, v := range views {
+			if v.AccountID == m.executionConfig.AccountID && (v.ProfileID != "" || v.Busy) {
+				return errors.New("account is owned by an automatic runner; pause and resolve that account first")
+			}
+		}
+	}
 	if (m.c.Mode != "manual-approval" && m.c.Mode != "automated") || !m.executionConfig.Enabled {
 		return errors.New("enable local execution first")
 	}
@@ -176,6 +206,9 @@ func (m *Manager) armExecutionLocked(ctx context.Context, a execution.Authorizat
 			c.NewsFilter = m.c.NewsFilter
 			next := m.c
 			next.Mode = "manual-approval"
+			if len(m.profileSetups) > 0 && m.c.Mode == "automated" {
+				next.Mode = "automated"
+			}
 			if a.AutomationConfirmed {
 				profile, err := m.configuredAutomationLocked()
 				if err != nil {
@@ -224,7 +257,7 @@ func (m *Manager) PreviewExecution(ctx context.Context, profileID, contract, pay
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.c.Mode != "manual-approval" || !m.executionConfig.Enabled {
+	if (m.c.Mode != "manual-approval" && m.c.Mode != "automated") || !m.executionConfig.Enabled {
 		return errors.New("local execution is disabled")
 	}
 	var profile *Automation
@@ -263,7 +296,7 @@ func (m *Manager) SubmitExecution(ctx context.Context, actor, password, token st
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.c.Mode != "manual-approval" || !m.executionConfig.Enabled {
+	if (m.c.Mode != "manual-approval" && m.c.Mode != "automated") || !m.executionConfig.Enabled {
 		return errors.New("execution is disabled")
 	}
 	return m.executor.Submit(ctx, token)
@@ -279,7 +312,7 @@ func (m *Manager) FlattenExecution(ctx context.Context, actor, password string) 
 func (m *Manager) PreviewTicket(ctx context.Context, contract, direction string, orderType, quantity, stopTicks, targetTicks int, entry float64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.c.Mode != "manual-approval" || !m.executionConfig.Enabled {
+	if (m.c.Mode != "manual-approval" && m.c.Mode != "automated") || !m.executionConfig.Enabled {
 		return errors.New("enable and arm local execution first")
 	}
 	if quantity < 1 || quantity > 100 {
@@ -336,7 +369,7 @@ func (m *Manager) AcquireExecutionLease() error {
 		f.Close()
 		return err
 	}
-	engine, err := execution.New(m.executionStore, m.executionFactory(), executionAudit(audit))
+	engine, err := execution.New(storage.ScopedExecution{Inbox: m.executionStore, Manual: true}, m.executionFactory(), executionAudit(audit))
 	if err != nil {
 		f.Close()
 		return err
@@ -348,7 +381,7 @@ func (m *Manager) AcquireExecutionLease() error {
 	engine.SetNewsCalendar(m.news)
 	m.executor = engine
 	m.executionLease = f
-	return nil
+	return m.initFleet()
 }
 
 func executionAudit(audit *storage.Inbox) func(string, string) {

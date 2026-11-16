@@ -51,6 +51,10 @@ type Contract struct {
 	SymbolID       string  `json:"symbolId"`
 }
 type Client struct {
+	metadataLoading     map[string]chan struct{}
+	metadataMu          sync.Mutex
+	contracts           map[string]contractCache
+	governor            *Governor
 	http                *http.Client
 	base, username, key string
 	mu                  sync.Mutex // serializes token renewal; no concurrent refresh storms
@@ -81,6 +85,13 @@ func (c *Client) call(ctx context.Context, path, token string, body, out any) er
 
 // request is private; only the pinned execution capability may invoke writes.
 func (c *Client) request(ctx context.Context, path, token string, body, out any) error {
+	if c.governor != nil {
+		release, err := c.governor.Acquire(ctx, path)
+		if err != nil {
+			return err
+		}
+		defer release()
+	}
 	data, err := json.Marshal(body)
 	if err != nil {
 		return errors.New("request encoding failed")
@@ -217,10 +228,45 @@ func (c *Client) SearchContracts(ctx context.Context, text string) ([]Contract, 
 	}{false, text}, &r)
 	return r.Contracts, err
 }
+
+type contractCache struct {
+	contract Contract
+	at       time.Time
+}
+
 func (c *Client) Contract(ctx context.Context, id string) (Contract, error) {
 	if id == "" || len(id) > 128 {
 		return Contract{}, errors.New("invalid contract ID")
 	}
+	for {
+		c.metadataMu.Lock()
+		cached, ok := c.contracts[id]
+		if ok && time.Since(cached.at) < time.Minute {
+			c.metadataMu.Unlock()
+			return cached.contract, nil
+		}
+		if pending := c.metadataLoading[id]; pending != nil {
+			c.metadataMu.Unlock()
+			select {
+			case <-pending:
+				continue
+			case <-ctx.Done():
+				return Contract{}, ctx.Err()
+			}
+		}
+		if c.metadataLoading == nil {
+			c.metadataLoading = map[string]chan struct{}{}
+		}
+		c.metadataLoading[id] = make(chan struct{})
+		c.metadataMu.Unlock()
+		break
+	}
+	defer func() {
+		c.metadataMu.Lock()
+		close(c.metadataLoading[id])
+		delete(c.metadataLoading, id)
+		c.metadataMu.Unlock()
+	}()
 	var r struct {
 		Contract Contract `json:"contract"`
 	}
@@ -229,6 +275,17 @@ func (c *Client) Contract(ctx context.Context, id string) (Contract, error) {
 	}{id}, &r)
 	if err == nil && (r.Contract.ID != id || r.Contract.TickSize <= 0 || r.Contract.TickValue <= 0) {
 		err = errors.New("invalid contract metadata")
+	}
+	if err == nil {
+		c.metadataMu.Lock()
+		if c.contracts == nil {
+			c.contracts = map[string]contractCache{}
+		}
+		if len(c.contracts) >= 512 {
+			clear(c.contracts)
+		}
+		c.contracts[id] = contractCache{r.Contract, time.Now()}
+		c.metadataMu.Unlock()
 	}
 	return r.Contract, err
 }

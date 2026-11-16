@@ -236,3 +236,43 @@ func TestPlacementReasonIsBoundedRedactedAndNotPartOfError(t *testing.T) {
 		t.Fatal("captured unrelated response")
 	}
 }
+
+func TestContractSingleflightCacheAndExpiry(t *testing.T) {
+	var calls atomic.Int32
+	c := testClient(t, func(r *http.Request) (*http.Response, error) {
+		if r.URL.Path == "/api/Auth/loginKey" {
+			return response(200, `{"success":true,"token":"test"}`), nil
+		}
+		if r.URL.Path != "/api/Contract/searchById" {
+			t.Errorf("unexpected request %s", r.URL.Path)
+		}
+		calls.Add(1)
+		time.Sleep(10 * time.Millisecond)
+		return response(200, `{"success":true,"contract":{"id":"mnq","tickSize":0.25,"tickValue":0.5}}`), nil
+	})
+	var wg sync.WaitGroup
+	for n := 0; n < 20; n++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if _, err := c.Contract(context.Background(), "mnq"); err != nil {
+				t.Error(err)
+			}
+		}()
+	}
+	wg.Wait()
+	if calls.Load() != 1 {
+		t.Fatal("metadata calls not coalesced", calls.Load())
+	}
+	c.metadataMu.Lock()
+	entry := c.contracts["mnq"]
+	entry.at = time.Now().Add(-2 * time.Minute)
+	c.contracts["mnq"] = entry
+	c.metadataMu.Unlock()
+	if _, err := c.Contract(context.Background(), "mnq"); err != nil {
+		t.Fatal(err)
+	}
+	if calls.Load() != 2 {
+		t.Fatal("expired metadata reused")
+	}
+}

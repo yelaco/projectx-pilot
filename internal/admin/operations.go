@@ -152,9 +152,25 @@ func (m *Manager) SaveOperationDays(week string, blocked []string, news string, 
 	}
 	// Disarm before committing a policy change, without stopping position monitoring.
 	m.executor.Pause()
+	if m.fleet != nil {
+		if id == "" {
+			_ = m.fleet.PauseAll(false)
+		} else {
+			for _, p := range m.policies.Automations {
+				if p.TradeManagerID == id {
+					m.fleet.PauseProfile(p.ID)
+				}
+			}
+		}
+	}
 	if err := config.Save(m.configPath, next); err != nil {
 		return errors.New("could not save operation days")
 	}
 	m.c = next
+	if m.fleet != nil {
+		if err := m.fleet.SetOperationPlan(next.NoTradeDates, next.TradeManagerNoTradeDates); err != nil {
+			return err
+		}
+	}
 	return m.executor.SetOperationPlan(next.NoTradeDates, next.TradeManagerNoTradeDates)
 }
