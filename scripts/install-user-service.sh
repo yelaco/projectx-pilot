@@ -6,15 +6,19 @@ if [[ "$(id -u)" == 0 ]]; then
 fi
 named_hostname=""
 named_token_file=""
+dashboard_scope=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    --remote-dashboard)
+      [[ $# -ge 2 ]] || { echo "--remote-dashboard needs a private scope JSON file" >&2; exit 1; }
+      dashboard_scope="$2"; shift 2 ;;
     --named-tunnel)
       [[ $# -ge 2 ]] || { echo 'Usage: --named-tunnel alerts.example.com [--token-file /private/file]' >&2; exit 1; }
       named_hostname="$2"; shift 2 ;;
     --token-file)
       [[ $# -ge 2 ]] || { echo '--token-file needs a path' >&2; exit 1; }
       named_token_file="$2"; shift 2 ;;
-    *) echo 'Usage: ./scripts/install-user-service.sh [--named-tunnel alerts.example.com [--token-file /private/file]]' >&2; exit 1 ;;
+    *) echo 'Usage: ./scripts/install-user-service.sh [--named-tunnel alerts.example.com [--token-file /private/file]] [--remote-dashboard /private/scope.json]' >&2; exit 1 ;;
   esac
 done
 if [[ -n "$named_token_file" && -z "$named_hostname" ]]; then
@@ -49,6 +53,11 @@ go test ./...
 go vet ./...
 go build -buildvcs=false -o bin/bot ./cmd/bot
 go build -buildvcs=false -o bin/webhook ./cmd/webhook
+if [[ -n "$dashboard_scope" ]]; then
+  [[ -r "$dashboard_scope" ]] || { echo "Remote dashboard scope is unreadable" >&2; exit 1; }
+  go build -buildvcs=false -o bin/configure-dashboard ./cmd/configure-dashboard
+  bin/configure-dashboard -check -config "$HOME/.config/projectx-bot/config.yaml" -state "$HOME/.local/share/projectx-bot" < "$dashboard_scope"
+fi
 named_temp=""
 trap '[[ -z "$named_temp" ]] || rm -f -- "$named_temp"' EXIT
 if [[ -n "$named_hostname" ]]; then
@@ -123,6 +132,9 @@ install -m 755 bin/webhook "$HOME/.local/bin/projectx-webhook"
 if [[ ! -e "$HOME/.config/projectx-bot/config.yaml" ]]; then
   install -m 600 config/example.yaml "$HOME/.config/projectx-bot/config.yaml"
 fi
+if [[ -n "$dashboard_scope" ]]; then
+  bin/configure-dashboard -config "$HOME/.config/projectx-bot/config.yaml" -state "$HOME/.local/share/projectx-bot" < "$dashboard_scope"
+fi
 install -m 644 deploy/systemd/projectx-bot.service "$HOME/.config/systemd/user/projectx-bot.service"
 install -m 644 deploy/systemd/projectx-webhook.service "$HOME/.config/systemd/user/projectx-webhook.service"
 systemctl --user daemon-reload
@@ -141,8 +153,7 @@ for attempt in {1..30}; do
   sleep 0.1
 done
 if [[ -f "$HOME/.local/share/projectx-bot/admin-password" ]]; then
-  printf 'Generated local admin password (unless overridden by BOT_DASHBOARD_TOKEN): '
-  cat "$HOME/.local/share/projectx-bot/admin-password"
+  printf 'Initial password file: %s/.local/share/projectx-bot/admin-password (existing saved logins take precedence).\n' "$HOME"
 fi
 printf 'Admin page: http://127.0.0.1:8080\nSign in with your saved admin login (initial username: local). Manage logins under Settings -> Admin access.\n'
 if ! systemctl --user is-active --quiet projectx-bot.service || ! systemctl --user is-active --quiet projectx-webhook.service; then

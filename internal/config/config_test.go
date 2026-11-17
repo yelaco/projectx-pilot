@@ -76,3 +76,29 @@ func TestRetiredGlobalInstrumentsAreIgnoredAndRemovedOnSave(t *testing.T) {
 		})
 	}
 }
+
+func TestRemoteDashboardRequiresCompleteExactAccessScope(t *testing.T) {
+	valid := RemoteDashboard{Origin: "https://pilot.example.test", TeamDomain: "https://unit.cloudflareaccess.com", Audience: strings.Repeat("a", 64), Emails: []string{"owner@example.test"}}
+	if err := valid.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	for _, change := range []func(*RemoteDashboard){
+		func(c *RemoteDashboard) { c.Origin = "http://pilot.example.test" },
+		func(c *RemoteDashboard) { c.Origin = "https://pilot.example.test/" },
+		func(c *RemoteDashboard) { c.Origin = "https://pilot.example.test:443" },
+		func(c *RemoteDashboard) { c.TeamDomain = "https://evil.example" },
+		func(c *RemoteDashboard) { c.Audience = "" },
+		func(c *RemoteDashboard) { c.Emails = nil },
+		func(c *RemoteDashboard) { c.Emails = []string{"*@example.test"} },
+		func(c *RemoteDashboard) { c.Origin = "" },
+	} {
+		c := valid
+		change(&c)
+		if err := c.Validate(); err == nil {
+			t.Fatalf("accepted unsafe remote configuration: %+v", c)
+		}
+	}
+	if err := (RemoteDashboard{}).Validate(); err != nil {
+		t.Fatal(err)
+	}
+}

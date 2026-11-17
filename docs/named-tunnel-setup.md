@@ -28,7 +28,7 @@ The installer does not start a tunnel during development/tests. No Cloudflare or
 
 ## One-time Cloudflare setup
 
-Domain registration and the named tunnel/hostname route remain Cloudflare account operations; this command does not buy domains or create/change cloud resources. Configure `alerts.yelaco.trade` to forward to **HTTP `127.0.0.1:8090`** with no public admin route. Use the token of that remotely managed tunnel. A hostname alone cannot identify or authorize the connector. Keep the Cloudflare-side route restricted to the notification receiver; the app cannot enforce a remote dashboard route configuration.
+Domain registration and the named tunnel/hostname route remain Cloudflare account operations; this command does not buy domains or create/change cloud resources. Configure `alerts.yelaco.trade` to forward to **HTTP `127.0.0.1:8090`** with no public admin route by default. Optional full remote dashboard access uses a separate hostname and verified Cloudflare Access; see [remote dashboard setup](remote-dashboard.md). Use the token of that remotely managed tunnel. A hostname alone cannot identify or authorize the connector. Keep the Cloudflare-side route restricted to the notification receiver; the app cannot enforce a remote dashboard route configuration.
 
 Cloudflare documents [`--token-file`](https://developers.cloudflare.com/tunnel/reference/run-parameters/#token-file) for remotely managed tunnels, requiring cloudflared 2025.4.0+. The installer checks flag support. Arch's package installs `/usr/bin/cloudflared`, used by the user unit. This is a notification-ingress connector, not WARP or a proxy for ProjectX requests. It does not establish provider approval for remote alerts.
 

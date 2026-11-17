@@ -1,0 +1,22 @@
+[Unit]
+Description=ProjectX authenticated dashboard Cloudflare connector
+After=network-online.target projectx-bot.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/cloudflared --no-autoupdate --config %h/.config/projectx-bot/dashboard-tunnel.yaml tunnel --loglevel error run
+Restart=on-failure
+RestartSec=15
+TimeoutStopSec=40
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+RestrictSUIDSGID=yes
+LockPersonality=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=default.target

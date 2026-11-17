@@ -95,7 +95,11 @@ func run() error {
 	defer func() { cancel(); <-automationDone }()
 	service := app.New(client, c.AccountID)
 	manager.Attach(service)
-	srv := &http.Server{Addr: c.DashboardListen, Handler: dashboard.AdminHandler(service, token, c.DashboardListen, manager), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 45 * time.Second, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 8192}
+	dashboardHandler, err := dashboard.AdminHandlerWithRemote(service, token, c.DashboardListen, manager, c.RemoteDashboard)
+	if err != nil {
+		return err
+	}
+	srv := &http.Server{Addr: c.DashboardListen, Handler: dashboardHandler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 45 * time.Second, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 8192}
 	done := make(chan struct{})
 	go func() { defer close(done); service.Run(ctx, c.RefreshInterval, log) }()
 	failures := make(chan error, 1)

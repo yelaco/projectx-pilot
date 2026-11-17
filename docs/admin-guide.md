@@ -199,3 +199,7 @@ The checklist separates current observations, unresolved/retained entry locks an
 No additional ProjectX requests, subscriptions, quote warm-ups, public ingress probes or Discord test messages are started. Feed inspection uses existing thread-safe caches; active-account observation age accounts for the current reconciliation backstop. The existing monitor's fixed loopback receiver check is reused. Internal read/write/storage and external connectivity are not exhaustively tested; each row states what was actually observed.
 
 System Discord messages include a link to the same health page using the configured `127.0.0.1` dashboard port. Open it on the laptop running the app; it is not a public admin URL. Daily trading reports keep their independent destination/content. The authenticated `/api/system-health` endpoint/export contains checklist rows and counts only, excluding webhook URLs/tokens, signal payloads, raw responses and provider rejection details. The existing unauthenticated `/healthz` remains discovery-only and is unchanged.
+
+## Optional remote dashboard
+
+The full dashboard can be made available through a dedicated Cloudflare Tunnel hostname with signed Access identity verification and the existing app login. This is disabled by default; the listener remains loopback-only. Authorized remote controls use the same handlers, risk checks, CSRF and action-specific password confirmations as local controls. All configuration, broker credentials and trading requests stay on the laptop. See [remote dashboard setup and recovery](remote-dashboard.md).

@@ -851,6 +851,9 @@ func withHost(h http.Handler, address string) http.Handler {
 // Origin is absent/opaque. A foreign explicit Origin is never accepted.
 func sameOriginForm(r *http.Request) bool {
 	expected := "http://" + r.Host
+	if origin, ok := r.Context().Value(originContextKey{}).(string); ok {
+		expected = origin
+	}
 	origin := r.Header.Get("Origin")
 	if origin != "" && origin != "null" {
 		return origin == expected
@@ -859,5 +862,5 @@ func sameOriginForm(r *http.Request) bool {
 		return true
 	}
 	ref, err := url.Parse(r.Header.Get("Referer"))
-	return err == nil && ref.Scheme == "http" && ref.Host == r.Host && ref.User == nil
+	return err == nil && ref.Scheme+"://"+ref.Host == expected && ref.User == nil
 }

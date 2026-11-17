@@ -5,15 +5,67 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/mail"
+	"net/url"
 	"os"
+	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/yelaco/projectx-pilot/internal/session"
 	"gopkg.in/yaml.v3"
 )
 
+type RemoteDashboard struct {
+	Origin     string   `yaml:"origin"`
+	TeamDomain string   `yaml:"team_domain"`
+	Audience   string   `yaml:"audience"`
+	Emails     []string `yaml:"emails"`
+}
+
+var dashboardHostname = regexp.MustCompile(`^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$`)
+
+func (r RemoteDashboard) Validate() error {
+	if r.Origin == "" {
+		if r.TeamDomain != "" || r.Audience != "" || len(r.Emails) > 0 {
+			return errors.New("remote dashboard requires an HTTPS origin")
+		}
+		return nil
+	}
+	u, err := url.Parse(r.Origin)
+	if err != nil || u.Scheme != "https" || u.Host == "" || u.Host != u.Hostname() || u.User != nil || u.Path != "" || u.RawQuery != "" || u.Fragment != "" || !dashboardHostname.MatchString(u.Host) || len(u.Host) > 253 || net.ParseIP(u.Host) != nil || u.ForceQuery {
+		return errors.New("remote dashboard origin must be an exact HTTPS hostname without path or port")
+	}
+	team, err := url.Parse(r.TeamDomain)
+	if err != nil || team.Scheme != "https" || team.Host != team.Hostname() || !strings.HasSuffix(team.Host, ".cloudflareaccess.com") || team.User != nil || team.Path != "" || team.RawQuery != "" || team.Fragment != "" || !dashboardHostname.MatchString(team.Host) || team.ForceQuery {
+		return errors.New("remote dashboard requires an HTTPS Cloudflare Access team domain")
+	}
+	if len(r.Audience) != 64 {
+		return errors.New("remote dashboard requires the exact Access application audience")
+	}
+	for _, c := range r.Audience {
+		if !strings.ContainsRune("0123456789abcdef", c) {
+			return errors.New("invalid Access audience")
+		}
+	}
+	if len(r.Emails) == 0 || len(r.Emails) > 20 {
+		return errors.New("remote dashboard requires 1..20 exact allowed emails")
+	}
+	for _, email := range r.Emails {
+		parsed, err := mail.ParseAddress(email)
+		if err != nil || parsed.Address != email {
+			return errors.New("invalid remote dashboard email")
+		}
+		if strings.TrimSpace(email) != email || strings.Count(email, "@") != 1 || strings.ContainsAny(email, "*\r\n ") {
+			return errors.New("invalid remote dashboard email")
+		}
+	}
+	return nil
+}
+
 type Config struct {
+	RemoteDashboard          RemoteDashboard     `yaml:"remote_dashboard,omitempty"`
 	TradeManagerNoTradeDates map[string][]string `yaml:"trade_manager_no_trade_dates,omitempty"`
 	NoTradeDates             []string            `yaml:"no_trade_dates,omitempty"`
 	NewsFilter               string              `yaml:"news_filter"`
@@ -59,6 +111,9 @@ func Load(path string) (Config, error) {
 }
 
 func (c Config) Validate() error {
+	if err := c.RemoteDashboard.Validate(); err != nil {
+		return err
+	}
 	if len(c.TradeManagerNoTradeDates) > 50 {
 		return errors.New("maximum 50 manager operation plans")
 	}
