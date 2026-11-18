@@ -954,3 +954,18 @@ func TestAutomationRoutingSymbolUsesPinnedContract(t *testing.T) {
 		})
 	}
 }
+
+func TestRolloverArmingCannotSwitchAuthorizedBrokerInstrument(t *testing.T) {
+	e, api, _, _, c, p, a, _, _ := fixture(t)
+	c.Automated = true
+	c.AutomationProfileID = "roll"
+	c.AutomationContractID = "mnq"
+	c.AutomationSymbolID = "F.US.MCLE"
+	a.AutomationConfirmed = true
+	if err := e.Arm(context.Background(), c, p, a); err == nil {
+		t.Fatal("rollover armed a different broker instrument")
+	}
+	if e.Status().Armed || len(api.requests) != 0 {
+		t.Fatal("invalid rollover gained execution authority")
+	}
+}

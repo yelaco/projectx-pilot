@@ -24,6 +24,7 @@ type gateway struct {
 	orders, history map[int64][]projectx.Order
 	positions       map[int64][]projectx.Position
 	trades          map[int64][]projectx.Trade
+	contracts       map[string]projectx.Contract
 	placed          map[int64]int
 	closed          map[int64]int
 	requests        map[int64]projectx.PlaceRequest
@@ -49,7 +50,12 @@ func (a accountAPI) Accounts(ctx context.Context) ([]projectx.Account, error) {
 	s := true
 	return []projectx.Account{{ID: 1, Name: "Combine", CanTrade: true, Simulated: &s, Balance: 50000}, {ID: 2, Name: "Express Funded", CanTrade: true, Simulated: &s, Balance: 50000}, {ID: 3, Name: "Practice", CanTrade: true, Simulated: &s, Balance: 50000}}, nil
 }
-func (a accountAPI) Contract(context.Context, string) (projectx.Contract, error) {
+func (a accountAPI) Contract(_ context.Context, id string) (projectx.Contract, error) {
+	a.g.mu.Lock()
+	defer a.g.mu.Unlock()
+	if contract, ok := a.g.contracts[id]; ok {
+		return contract, nil
+	}
 	return projectx.Contract{ID: "mnq", SymbolID: "F.US.MNQ", TickSize: .25, TickValue: .5, ActiveContract: true}, nil
 }
 func (a accountAPI) OpenOrders(context.Context, int64) ([]projectx.Order, error) {

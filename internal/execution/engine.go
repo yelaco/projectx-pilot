@@ -135,7 +135,7 @@ func (e *Engine) Status() Status {
 	return e.snapshotLocked()
 }
 func (e *Engine) snapshotLocked() Status {
-	s := Status{MonitorRunning: e.ctx != nil && e.ctx.Err() == nil, LastReconcileAttempt: e.lastReconcileAttempt, LastReconcileSuccess: e.lastReconcileSuccess, ReconcileError: e.reconcileError, ProtectionCheck: e.protectionCheck, ProtectionCheckedAt: e.protectionCheckedAt, Quotes: e.quoteStatusLocked(), RecoveryPending: e.runWanted && !e.runRequested, RunRequested: e.runRequested, RunProfileID: e.runProfileID, RunMessage: e.runMessage, Automated: e.config.Automated, AutomationProfileID: e.config.AutomationProfileID, ArmedAt: e.armedAt, Enabled: e.config.Enabled, Armed: e.now().Before(e.armedUntil), AccountID: e.config.AccountID, ArmedUntil: e.armedUntil, Error: e.message, Intents: append([]Intent(nil), e.intents...)}
+	s := Status{MonitorRunning: e.ctx != nil && e.ctx.Err() == nil, LastReconcileAttempt: e.lastReconcileAttempt, LastReconcileSuccess: e.lastReconcileSuccess, ReconcileError: e.reconcileError, ProtectionCheck: e.protectionCheck, ProtectionCheckedAt: e.protectionCheckedAt, Quotes: e.quoteStatusLocked(), RecoveryPending: e.runWanted && !e.runRequested, RunRequested: e.runRequested, RunProfileID: e.runProfileID, RunMessage: e.runMessage, Automated: e.config.Automated, AutomationProfileID: e.config.AutomationProfileID, AutomationContractID: e.config.AutomationContractID, ArmedAt: e.armedAt, Enabled: e.config.Enabled, Armed: e.now().Before(e.armedUntil), AccountID: e.config.AccountID, ArmedUntil: e.armedUntil, Error: e.message, Intents: append([]Intent(nil), e.intents...)}
 	if s.RecoveryPending && !strings.Contains(strings.ToLower(s.RunMessage), "recovery") {
 		s.RunMessage = "Waiting for recovery · " + s.RunMessage
 	}
@@ -316,6 +316,12 @@ func (e *Engine) Arm(ctx context.Context, c Config, p risk.Profile, a Authorizat
 		if err != nil {
 			return errors.New("automatic contract metadata unavailable")
 		}
+		if metadata.ID != c.AutomationContractID {
+			return errors.New("selected contract metadata identity does not match")
+		}
+		if c.AutomationSymbolID != "" && metadata.SymbolID != c.AutomationSymbolID {
+			return errors.New("rollover contract differs from the authorized broker instrument")
+		}
 		if !metadata.ActiveContract {
 			return errors.New("selected contract is not active")
 		}
@@ -423,6 +429,9 @@ func (e *Engine) size(ctx context.Context, s signal.Signal, contract string) (ri
 	}
 	// Automatic alerts use the locally pinned contract; their symbol is a
 	// profile routing key, not a broker contract selector.
+	if e.config.Automated && e.config.AutomationSymbolID != "" && c.SymbolID != e.config.AutomationSymbolID {
+		return empty, c, errors.New("rollover contract differs from the authorized broker instrument")
+	}
 	if c.ID != contract {
 		return empty, c, errors.New("contract metadata does not match selected contract")
 	}
@@ -831,4 +840,20 @@ func (e *Engine) quoteStatusLocked() realtime.QuoteStatus {
 		}
 	}
 	return realtime.QuoteStatus{Contract: contract, State: "Cached quote unavailable"}
+}
+
+// HoldEntries suspends arming without revoking an in-process Start. It does not
+// touch positions/orders or restore a manually revoked running choice.
+func (e *Engine) HoldEntries(message string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	defer e.publishLocked()
+	if !e.runWanted && !e.runRequested {
+		return
+	}
+	if e.active() != nil {
+		return
+	}
+	e.disarm()
+	e.runMessage = message
 }

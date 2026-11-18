@@ -45,6 +45,7 @@ type RunSetup struct {
 	ConfirmedAt      time.Time `json:"confirmed_at"`
 }
 type Config struct {
+	AutomationSymbolID    string   `json:"automation_symbol_id,omitempty"`
 	NewsFilter            string   `json:"news_filter,omitempty"`
 	DisablePriceDeviation bool     `json:"disable_price_deviation,omitempty"`
 	RunSetup              RunSetup `json:"run_setup"`
@@ -153,6 +154,7 @@ type Status struct {
 	RunProfileID, RunMessage string
 	Automated                bool
 	AutomationProfileID      string
+	AutomationContractID     string
 	ArmedAt                  time.Time
 	Enabled, Armed           bool
 	AccountID                int64

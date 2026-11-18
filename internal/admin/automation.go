@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/yelaco/projectx-pilot/internal/automation"
+	"github.com/yelaco/projectx-pilot/internal/projectx"
 	"github.com/yelaco/projectx-pilot/internal/storage"
 )
 
@@ -252,6 +253,15 @@ func (m *Manager) processAutomation(ctx context.Context) error {
 }
 
 func (m *Manager) UpdateAutomationExecution(id, mode, contract, orderType string, managerID ...string) error {
+	return m.updateAutomationExecution(context.Background(), id, mode, contract, orderType, "", managerID...)
+}
+func (m *Manager) UpdateAutomationContractMode(ctx context.Context, id, mode, contract, orderType, contractMode string, managerID ...string) error {
+	if contractMode != "pinned" && contractMode != "active" {
+		return errors.New("select pinned expiry or automatic rollover")
+	}
+	return m.updateAutomationExecution(ctx, id, mode, contract, orderType, contractMode, managerID...)
+}
+func (m *Manager) updateAutomationExecution(ctx context.Context, id, mode, contract, orderType, contractMode string, managerID ...string) error {
 	if len(managerID) > 1 {
 		return errors.New("select one Trade Manager")
 	}
@@ -278,6 +288,49 @@ func (m *Manager) UpdateAutomationExecution(id, mode, contract, orderType string
 					}
 				}
 				p.Automations[n].TradeManagerID = selected
+			}
+			selected := &p.Automations[n]
+			if contractMode != "" {
+				selected.ContractMode = contractMode
+			}
+			if selected.ContractMode == "active" {
+				var symbol string
+				if selected.ContractID == contract && selected.ContractSymbolID != "" {
+					symbol = selected.ContractSymbolID
+				}
+				if m.service != nil {
+					snapshot := m.service.Snapshot()
+					if snapshot.Connected && m.now().Sub(snapshot.UpdatedAt) <= 2*m.c.RefreshInterval {
+						for _, candidate := range snapshot.Contracts {
+							if candidate.ID == contract && candidate.RootSymbol() != "" {
+								symbol = candidate.SymbolID
+								break
+							}
+						}
+					}
+				}
+				if symbol == "" {
+					reader, readErr := m.reader()
+					if readErr != nil {
+						return readErr
+					}
+					lookup, ok := reader.(interface {
+						Contract(context.Context, string) (projectx.Contract, error)
+					})
+					if !ok {
+						return errors.New("refresh authoritative contract discovery before enabling rollover")
+					}
+					check, cancel := context.WithTimeout(ctx, m.c.RequestTimeout)
+					metadata, lookupErr := lookup.Contract(check, contract)
+					cancel()
+					if lookupErr != nil || metadata.ID != contract || metadata.RootSymbol() == "" {
+						return errors.New("selected contract instrument could not be verified for rollover")
+					}
+					symbol = metadata.SymbolID
+				}
+				selected.ContractSymbolID = symbol
+			} else {
+				selected.ContractSymbolID = ""
 			}
 			p.Automations[n].ExecutionMode = mode
 			p.Automations[n].ContractID = contract

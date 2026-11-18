@@ -14,7 +14,7 @@ import (
 
 // ResumeAfterRecovery retains only a Start made in this process. It never places
 // an order or restores authority after Pause/restart. Fleet must still freshly Arm.
-func (e *Engine) ResumeAfterRecovery(ctx context.Context, profile, date string) (ready bool, err error) {
+func (e *Engine) ResumeAfterRecovery(ctx context.Context, profile, date string, contracts ...string) (ready bool, err error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	defer e.publishLocked()
@@ -119,8 +119,22 @@ func (e *Engine) ResumeAfterRecovery(ctx context.Context, profile, date string) 
 	if len(positions) != 0 || len(orders) != 0 {
 		return false, errors.New("waiting for flat account with no working orders; account untouched")
 	}
-	e.quotes.Watch(e.ctx, e.config.AutomationContractID)
-	q, err := e.entryQuote(ctx, e.config.AutomationContractID)
+	contract := e.config.AutomationContractID
+	if len(contracts) > 1 {
+		return false, errors.New("select one recovery contract")
+	}
+	if len(contracts) == 1 && contracts[0] != contract {
+		if e.config.AutomationSymbolID == "" {
+			return false, errors.New("rollover is not authorized")
+		}
+		metadata, lookupErr := e.api.Contract(ctx, contracts[0])
+		if lookupErr != nil || metadata.ID != contracts[0] || metadata.SymbolID != e.config.AutomationSymbolID || !metadata.ActiveContract {
+			return false, errors.New("recovery rollover contract could not be verified")
+		}
+		contract = contracts[0]
+	}
+	e.quotes.Watch(e.ctx, contract)
+	q, err := e.entryQuote(ctx, contract)
 	if err != nil {
 		return false, errors.New("fresh recovery market data unavailable")
 	}
@@ -128,7 +142,7 @@ func (e *Engine) ResumeAfterRecovery(ctx context.Context, profile, date string) 
 	if !finite(q.Price) || q.Price <= 0 || q.At.IsZero() || now.Sub(q.At) > 5*time.Second || q.At.After(now.Add(time.Second)) {
 		return false, errors.New("fresh recovery market data unavailable")
 	}
-	key := profile + "/" + account + "/" + date + "/" + reason
+	key := profile + "/" + account + "/" + date + "/" + reason + "/" + contract
 	if before != nil {
 		key += "/" + before.ID + "/" + before.Payload
 	}

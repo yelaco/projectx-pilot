@@ -172,6 +172,7 @@ async function monitor() {
    updateRunnerLock(row,runner);
    const status = runner.Status || {};
    const state = row.querySelector('[data-runner-state]');
+   const contractCell=row.querySelector('[data-runner-contract]');if(contractCell)contractCell.textContent=status.AutomationContractID || '';
    if (state) state.textContent = (runner.Busy ? 'Processing delivery' : status.Armed ? 'Armed' : status.RecoveryPending ? 'Waiting for recovery' : status.RunRequested ? 'Waiting' : 'Paused / recovery') + ' · ' + (status.RunMessage || '');
    const management = row.querySelector('[data-runner-management]');
    if (management) management.textContent = [status.Error || '', status.SubmissionDetail?.Reason ? 'ProjectX rejection reason: ' + status.SubmissionDetail.Reason : '', ...(status.Intents || []).filter(i => !['closed','cancelled','rejected'].includes(i.State)).map(i => (i.Signal?.symbol || '') + ' ' + (i.Signal?.direction || '') + ' ' + i.State + ' · order #' + i.OrderID + ' · ' + i.Message)].join(' ');

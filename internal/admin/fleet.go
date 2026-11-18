@@ -84,7 +84,7 @@ func (m *Manager) planLocked(id string) (fleet.Plan, error) {
 				if p.OrderType == "limit" {
 					typ = 1
 				}
-				return fleet.Plan{ProfileID: id, Strategy: p.Strategy, ContractID: p.ContractID, Instruments: append([]string(nil), p.Instruments...), Policy: manager.Clone(), OrderType: typ}, nil
+				return fleet.Plan{ContractMode: p.ContractMode, ContractSymbolID: p.ContractSymbolID, ProfileID: id, Strategy: p.Strategy, ContractID: p.ContractID, Instruments: append([]string(nil), p.Instruments...), Policy: manager.Clone(), OrderType: typ}, nil
 			}
 		}
 		return fleet.Plan{}, errors.New("assign a Trade Manager with explicit target accounts")
@@ -402,6 +402,10 @@ func (m *Manager) pauseChangedProfiles(next Policies) {
 // Network execution is performed by account workers and never under m.mu.
 func (m *Manager) processFleet(ctx context.Context) error {
 	m.mu.Lock()
+	if m.service != nil {
+		snapshot := m.service.Snapshot()
+		m.fleet.UpdateContractDiscovery(snapshot.Contracts, snapshot.UpdatedAt, snapshot.Connected, 2*m.c.RefreshInterval)
+	}
 	remote, err := m.remoteStore()
 	if err != nil {
 		m.mu.Unlock()

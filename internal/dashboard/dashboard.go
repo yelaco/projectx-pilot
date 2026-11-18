@@ -487,7 +487,13 @@ func handler(s *app.Service, token string, m *admin.Manager) http.Handler {
 			if r.URL.Path == "/automation-execution" {
 				var err error
 				if r.URL.Path == "/automation-execution" {
-					if values, ok := r.PostForm["trade_manager_id"]; ok && len(values) == 1 {
+					if r.PostForm.Has("contract_mode") {
+						managers := []string{}
+						if r.PostForm.Has("trade_manager_id") {
+							managers = append(managers, r.PostForm.Get("trade_manager_id"))
+						}
+						err = m.UpdateAutomationContractMode(r.Context(), r.PostForm.Get("id"), r.PostForm.Get("execution_mode"), r.PostForm.Get("contract_id"), r.PostForm.Get("order_type"), r.PostForm.Get("contract_mode"), managers...)
+					} else if values, ok := r.PostForm["trade_manager_id"]; ok && len(values) == 1 {
 						err = m.UpdateAutomationExecution(r.PostForm.Get("id"), r.PostForm.Get("execution_mode"), r.PostForm.Get("contract_id"), r.PostForm.Get("order_type"), values[0])
 					} else {
 						err = m.UpdateAutomationExecution(r.PostForm.Get("id"), r.PostForm.Get("execution_mode"), r.PostForm.Get("contract_id"), r.PostForm.Get("order_type"))
@@ -657,6 +663,8 @@ func handler(s *app.Service, token string, m *admin.Manager) http.Handler {
 					if old.ID == updated.ID {
 						updated.ExecutionMode = old.ExecutionMode
 						updated.ContractID = old.ContractID
+						updated.ContractMode = old.ContractMode
+						updated.ContractSymbolID = old.ContractSymbolID
 						updated.OrderType = old.OrderType
 					}
 				}

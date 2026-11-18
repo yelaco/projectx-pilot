@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/yelaco/projectx-pilot/internal/config"
+	"github.com/yelaco/projectx-pilot/internal/projectx"
 	"github.com/yelaco/projectx-pilot/internal/risk"
 	"os"
 	"path/filepath"
@@ -17,16 +18,18 @@ type AccountPolicy struct {
 	ExecutionAllowed bool  `json:"execution_allowed"`
 }
 type Automation struct {
-	ExecutionMode  string   `json:"execution_mode,omitempty"`
-	ContractID     string   `json:"contract_id,omitempty"`
-	OrderType      string   `json:"order_type,omitempty"`
-	TradeManagerID string   `json:"trade_manager_id,omitempty"`
-	ID             string   `json:"id"`
-	Name           string   `json:"name"`
-	Strategy       string   `json:"strategy"`
-	AccountID      int64    `json:"account_id"`
-	Instruments    []string `json:"instruments"`
-	Source         string   `json:"source"`
+	ContractMode     string   `json:"contract_mode,omitempty"`
+	ContractSymbolID string   `json:"contract_symbol_id,omitempty"`
+	ExecutionMode    string   `json:"execution_mode,omitempty"`
+	ContractID       string   `json:"contract_id,omitempty"`
+	OrderType        string   `json:"order_type,omitempty"`
+	TradeManagerID   string   `json:"trade_manager_id,omitempty"`
+	ID               string   `json:"id"`
+	Name             string   `json:"name"`
+	Strategy         string   `json:"strategy"`
+	AccountID        int64    `json:"account_id"`
+	Instruments      []string `json:"instruments"`
+	Source           string   `json:"source"`
 }
 type Policies struct {
 	TradeManagers   []risk.Profile  `json:"trade_managers,omitempty"`
@@ -82,6 +85,12 @@ func (p Policies) Validate() error {
 			if a.AccountID != expected {
 				return errors.New("automation account routing does not match its trade manager")
 			}
+		}
+		if a.ContractMode != "" && a.ContractMode != "pinned" && a.ContractMode != "active" {
+			return errors.New("contract mode must be pinned or active")
+		}
+		if a.ContractMode == "active" && (projectx.Contract{SymbolID: a.ContractSymbolID}).RootSymbol() == "" {
+			return errors.New("automatic rollover requires verified broker symbol metadata")
 		}
 		if a.ExecutionMode != "" && a.ExecutionMode != "review" && a.ExecutionMode != "automatic" {
 			return errors.New("execution mode must be review or automatic")

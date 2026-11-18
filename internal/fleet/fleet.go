@@ -17,6 +17,7 @@ import (
 
 	"github.com/yelaco/projectx-pilot/internal/execution"
 	"github.com/yelaco/projectx-pilot/internal/lockreview"
+	"github.com/yelaco/projectx-pilot/internal/projectx"
 	"github.com/yelaco/projectx-pilot/internal/risk"
 	"github.com/yelaco/projectx-pilot/internal/session"
 	"github.com/yelaco/projectx-pilot/internal/signal"
@@ -24,6 +25,7 @@ import (
 )
 
 type Plan struct {
+	ContractMode, ContractSymbolID         string
 	CalendarRevision                       string
 	OrderType                              int
 	ProfileID, Strategy, ContractID, Scope string
@@ -69,22 +71,26 @@ type runner struct {
 	retry      time.Time
 }
 type Fleet struct {
-	ready        chan struct{}
-	readyErr     error
-	stopping     bool
-	mu           sync.Mutex
-	store        *storage.Inbox
-	factory      execution.Factory
-	news         execution.NewsCalendar
-	now          func() time.Time
-	audit        func(string, string)
-	accounts     map[int64]*runner
-	ctx          context.Context
-	wg           sync.WaitGroup
-	paused       bool
-	active       atomic.Int64
-	dates        []string
-	managerDates map[string][]string
+	contracts        []projectx.Contract
+	contractsAt      time.Time
+	contractsHealthy bool
+	contractsMaxAge  time.Duration
+	ready            chan struct{}
+	readyErr         error
+	stopping         bool
+	mu               sync.Mutex
+	store            *storage.Inbox
+	factory          execution.Factory
+	news             execution.NewsCalendar
+	now              func() time.Time
+	audit            func(string, string)
+	accounts         map[int64]*runner
+	ctx              context.Context
+	wg               sync.WaitGroup
+	paused           bool
+	active           atomic.Int64
+	dates            []string
+	managerDates     map[string][]string
 }
 
 func New(store *storage.Inbox, factory execution.Factory, news execution.NewsCalendar, now func() time.Time, audit func(string, string)) (*Fleet, error) {
@@ -518,7 +524,13 @@ func (f *Fleet) arm(r *runner) {
 		f.mu.Unlock()
 		return
 	}
-	if s.Armed && f.now().Before(s.ArmedUntil) {
+	contractID, contractErr := f.resolveContractLocked(p)
+	if contractErr != nil {
+		f.mu.Unlock()
+		r.engine.HoldEntries("Running · waiting for rollover: " + contractErr.Error())
+		return
+	}
+	if s.Armed && f.now().Before(s.ArmedUntil) && (p.ContractMode != "active" || s.AutomationContractID == contractID) {
 		f.mu.Unlock()
 		return
 	}
@@ -551,7 +563,7 @@ func (f *Fleet) arm(r *runner) {
 	}
 	if !s.RunRequested && s.RecoveryPending {
 		check, cancel := context.WithTimeout(permission, 15*time.Second)
-		recovered, recoveryErr := r.engine.ResumeAfterRecovery(check, p.ProfileID, w.ID())
+		recovered, recoveryErr := r.engine.ResumeAfterRecovery(check, p.ProfileID, w.ID(), contractID)
 		cancel()
 		if recoveryErr != nil {
 			r.engine.SetRunMessage("Running · waiting for recovery: " + recoveryErr.Error())
@@ -586,7 +598,12 @@ func (f *Fleet) arm(r *runner) {
 	c.AccountID = r.id
 	c.Automated = true
 	c.AutomationProfileID = p.ProfileID
-	c.AutomationContractID = p.ContractID
+	c.AutomationContractID = contractID
+	if p.ContractMode == "active" {
+		c.AutomationSymbolID = p.ContractSymbolID
+	} else {
+		c.AutomationSymbolID = ""
+	}
 	policy, policyErr := p.Policy.ForAccount(r.id)
 	if policyErr != nil {
 		r.engine.SetRunMessage("Running · account risk configuration invalid")
@@ -609,6 +626,9 @@ func (f *Fleet) arm(r *runner) {
 		r.engine.SetRunMessage("Running · account readiness: " + err.Error())
 		return
 	}
+	if p.ContractMode == "active" && s.AutomationContractID != "" && s.AutomationContractID != contractID && f.audit != nil {
+		f.audit("INFO", fmt.Sprintf("Account #%d: active contract expiry updated after fresh flat-account checks; running choice retained and existing intents unchanged", r.id))
+	}
 	r.engine.SetRunMessage("Running · accepting eligible signals")
 }
 func jobID(profile, delivery string, account int64) string {
@@ -628,11 +648,15 @@ func (f *Fleet) Dispatch(record storage.Record, p Plan) error {
 	if err != nil {
 		return errors.New("invalid inbox receipt timestamp")
 	}
+	contractID, selectionErr := f.resolveContractLocked(p)
+	if selectionErr != nil {
+		contractID = p.ContractID
+	}
 	policy, _ := json.Marshal(p)
 	jobs := make([]storage.TargetJob, 0, len(p.Policy.AccountIDs))
 	tasks := map[int64]*runner{}
 	for _, account := range p.Targets() {
-		j := storage.TargetJob{ID: jobID(p.ProfileID, record.Signal.ID, account), DeliveryID: record.Signal.ID, ProfileID: p.ProfileID, ContractID: p.ContractID, AccountID: account, Policy: string(policy), ReceivedAt: received, ClaimedAt: f.now().UTC()}
+		j := storage.TargetJob{ID: jobID(p.ProfileID, record.Signal.ID, account), DeliveryID: record.Signal.ID, ProfileID: p.ProfileID, ContractID: contractID, AccountID: account, Policy: string(policy), ReceivedAt: received, ClaimedAt: f.now().UTC()}
 		j.RoutingMode = p.Policy.DistributionMode()
 		jobs = append(jobs, j)
 		tasks[account] = f.accounts[account]
@@ -699,6 +723,10 @@ func (f *Fleet) Dispatch(record storage.Record, p Plan) error {
 // Caller holds f.mu. Snapshot readiness only selects a target; authoritative
 // broker/risk checks still run immediately before that target can submit.
 func (f *Fleet) dispatchBlockReason(r *runner, record storage.Record, p Plan, received time.Time) string {
+	contractID, selectionErr := f.resolveContractLocked(p)
+	if selectionErr != nil {
+		return "Active expiry unavailable; new entries blocked"
+	}
 	reason := ""
 	age := p.Config.SignalMaxAge
 	if age <= 0 {
@@ -726,6 +754,9 @@ func (f *Fleet) dispatchBlockReason(r *runner, record storage.Record, p Plan, re
 		reason = "Profile/account was not started with this exact scope; no delayed replay"
 	} else {
 		s, _ := r.status.Load().(execution.Status)
+		if p.ContractMode == "active" && s.AutomationContractID != contractID {
+			return "New active expiry is awaiting fresh account arming; alert will not replay"
+		}
 		if !s.MonitorRunning || !s.RunRequested || !s.Armed || !f.now().Before(s.ArmedUntil) || received.Before(r.since) || received.Before(s.ArmedAt) || record.Signal.Timestamp.Before(r.since) || received.After(f.now().Add(time.Second)) {
 			reason = "Delivery arrived before arming or outside an eligible session; no delayed replay"
 		}

@@ -47,6 +47,7 @@ One running profile owns each account, with up to 20 targets per Trade Manager. 
 | --- | --- |
 | [Automation setup](docs/automatic-execution.md) | Profiles, account runners, routing, and updates |
 | [Signal distribution](docs/signal-distribution.md) | Copy versus round-robin allocation, readiness and durable rotation |
+| [Contract rollover](docs/automatic-rollover.md) | Opt-in active expiry selection with retained Start and unchanged existing positions |
 | [Dashboard](docs/admin-guide.md) | Configuration, monitoring, and administrator access |
 | [Webhook delivery](docs/named-tunnel-setup.md) | Permanent HTTPS hostname and tunnel setup |
 | [Risk and recovery](docs/risk-management.md) · [Recovery procedures](docs/recovery-procedures.md) | Sizing, protection, failure handling, and restart behavior |
