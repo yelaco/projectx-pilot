@@ -22,7 +22,7 @@ func profileStatuses(views []fleet.View) map[string]execution.Status {
 			s.Automated = true
 			s.AutomationProfileID = r.ProfileID
 			s.RunProfileID = r.ProfileID
-			s.RunRequested = s.RunRequested || r.Status.RunRequested
+			s.RunRequested = s.RunRequested || r.Status.RunRequested || r.Status.RecoveryPending
 			s.Armed = s.Armed || r.Status.Armed
 			out[r.ProfileID] = s
 			c := counts[r.ProfileID]
@@ -77,14 +77,17 @@ func profileStatuses(views []fleet.View) map[string]execution.Status {
 	return out
 }
 func displayExecutionMode(s execution.Status, views []fleet.View, configured bool) string {
-	autoRequested, autoArmed := false, false
+	autoRequested, autoArmed, recovering := false, false, false
 	for _, r := range views {
 		autoRequested = autoRequested || r.Status.RunRequested
+		recovering = recovering || r.Status.RecoveryPending
 		autoArmed = autoArmed || r.Status.Armed
 	}
 	switch {
 	case autoRequested || s.RunRequested:
 		return "Automation running"
+	case recovering || s.RecoveryPending:
+		return "Automation waiting for recovery"
 	case autoArmed || s.Armed && s.Automated:
 		return "Automatic execution armed"
 	case s.Armed:

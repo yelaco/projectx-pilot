@@ -197,3 +197,75 @@ func TestTradeManagerScheduleFormAndValidation(t *testing.T) {
 		t.Fatal("saving schedule armed trading")
 	}
 }
+
+func TestRoundRobinTradeManagerCanBeConfiguredAndRendered(t *testing.T) {
+	m, password, h := managementFixture(t)
+	csrf := formCSRF(t, requestAs(h, "local", password, "GET", "/trade-managers/new", nil))
+	fields := url.Values{"csrf": {csrf}, "id": {"distributed"}, "name": {"Distributed"}, "routing": {"multiple"}, "multi_account_mode": {"round_robin"}, "account_ids_csv": {"42,43"}, "max_risk_per_trade": {"150"}}
+	if w := requestAs(h, "local", password, "POST", "/trade-manager", fields); w.Code != 303 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	if m.Policies().TradeManagers[0].MultiAccountMode != "round_robin" {
+		t.Fatal("distribution setting not saved")
+	}
+	for _, path := range []string{"/trade-managers", "/trade-managers/profiles/distributed"} {
+		w := requestAs(h, "local", password, "GET", path, nil)
+		if w.Code != 200 || !strings.Contains(w.Body.String(), "round-robin") {
+			t.Fatal("distribution missing from UI", path, w.Code)
+		}
+	}
+	// Older clients omitting the new field must not silently change RR to copy.
+	fields.Del("multi_account_mode")
+	if w := requestAs(h, "local", password, "POST", "/trade-manager", fields); w.Code != 303 {
+		t.Fatal(w.Code)
+	}
+	if m.Policies().TradeManagers[0].MultiAccountMode != "round_robin" {
+		t.Fatal("old client erased routing mode")
+	}
+	fields.Set("multi_account_mode", "copy")
+	if w := requestAs(h, "local", password, "POST", "/trade-manager", fields); w.Code != 303 {
+		t.Fatal(w.Code)
+	}
+	if m.Policies().TradeManagers[0].DistributionMode() != "copy" {
+		t.Fatal("explicit copy selection ignored")
+	}
+}
+
+func TestPerAccountRiskOverridesPersistValidateAndCanBeCleared(t *testing.T) {
+	m, password, h := managementFixture(t)
+	csrf := formCSRF(t, requestAs(h, "local", password, "GET", "/trade-managers/new", nil))
+	fields := url.Values{"csrf": {csrf}, "id": {"risks"}, "name": {"Per account"}, "routing": {"multiple"}, "account_ids_csv": {"42,43"}, "max_risk_per_trade": {"150"}, "account_risk_overrides_present": {"yes"}, "account_risk_overrides": {"42=36\n43=72"}}
+	save := func(want int) {
+		t.Helper()
+		w := requestAs(h, "local", password, "POST", "/trade-manager", fields)
+		if w.Code != want {
+			t.Fatal(w.Code, w.Body.String())
+		}
+	}
+	save(303)
+	p := m.Policies().TradeManagers[0]
+	if p.MaxRiskForAccount(42) != 36 || p.MaxRiskForAccount(43) != 72 || p.MaxRiskPerTrade != 150 {
+		t.Fatal("account risk not saved", p)
+	}
+	page := requestAs(h, "local", password, "GET", "/trade-managers/profiles/risks", nil)
+	if page.Code != 200 || !strings.Contains(page.Body.String(), `name="account_risk_42"`) || !strings.Contains(page.Body.String(), `value="36"`) {
+		t.Fatal("override not shown in editor")
+	}
+	fields.Set("account_risk_overrides", "99=30")
+	save(400)
+	fields.Set("account_risk_overrides", "42=NaN")
+	save(400)
+	fields.Set("account_risk_overrides", "42=36\n42=72")
+	save(400)
+	fields.Del("account_risk_overrides")
+	fields.Del("account_risk_overrides_present")
+	save(303)
+	if m.Policies().TradeManagers[0].MaxRiskForAccount(42) != 36 {
+		t.Fatal("older client silently erased override")
+	}
+	fields.Set("account_risk_overrides_present", "yes")
+	save(303)
+	if len(m.Policies().TradeManagers[0].AccountRiskOverrides) != 0 || m.Policies().TradeManagers[0].MaxRiskForAccount(42) != 150 {
+		t.Fatal("clearing override did not restore default")
+	}
+}

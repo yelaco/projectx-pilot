@@ -20,6 +20,7 @@ type ExecutionMonitor struct {
 	ModeLabel                string
 	SubmissionDetail         *execution.SubmissionDetail `json:",omitempty"`
 	Configured               bool
+	RecoveryPending          bool
 	RunRequested             bool
 	RunProfileID, RunMessage string
 	Automated                bool
@@ -78,7 +79,7 @@ func (m *Manager) Note(level, component, message string) {
 func (m *Manager) Monitor(ctx context.Context) Monitor {
 	manualStatus := m.executor.Status()
 	statusExecution := m.RuntimeStatus()
-	summary := ExecutionMonitor{SubmissionDetail: statusExecution.SubmissionDetail, Configured: m.ExecutionConfig().Enabled || m.FleetConfigured(), RunRequested: statusExecution.RunRequested, RunProfileID: statusExecution.RunProfileID, RunMessage: statusExecution.RunMessage, Automated: statusExecution.Automated, AutomationProfileID: statusExecution.AutomationProfileID, Armed: statusExecution.Armed, AccountID: statusExecution.AccountID, ArmedUntil: statusExecution.ArmedUntil, State: "idle", Message: statusExecution.Error}
+	summary := ExecutionMonitor{SubmissionDetail: statusExecution.SubmissionDetail, Configured: m.ExecutionConfig().Enabled || m.FleetConfigured(), RecoveryPending: statusExecution.RecoveryPending, RunRequested: statusExecution.RunRequested, RunProfileID: statusExecution.RunProfileID, RunMessage: statusExecution.RunMessage, Automated: statusExecution.Automated, AutomationProfileID: statusExecution.AutomationProfileID, Armed: statusExecution.Armed, AccountID: statusExecution.AccountID, ArmedUntil: statusExecution.ArmedUntil, State: "idle", Message: statusExecution.Error}
 	if len(statusExecution.Intents) > 0 {
 		i := statusExecution.Intents[0]
 		summary.AccountID = i.AccountID

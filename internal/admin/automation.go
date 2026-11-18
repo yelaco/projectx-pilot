@@ -100,7 +100,17 @@ func (m *Manager) automationResultsLocked() ([]storage.AutomationReceipt, error)
 		} else if counts["claimed"] > 0 {
 			state = "processing"
 		}
-		rows = append(rows, storage.AutomationReceipt{ID: id, ProfileID: list[0].ProfileID, AccountID: "multiple", ContractID: list[0].ContractID, State: state, Message: fmt.Sprintf("Account targets: %d accepted, %d blocked, %d uncertain, %d processing. Inspect Execution runners.", counts["submitted"], counts["blocked"]+counts["interrupted"], counts["uncertain"], counts["claimed"]), UpdatedAt: list[0].FinishedAt.Format(time.RFC3339Nano)})
+		accountLabel := "multiple"
+		message := fmt.Sprintf("Account targets: %d accepted, %d blocked, %d uncertain, %d processing. Inspect Execution runners.", counts["submitted"], counts["blocked"]+counts["interrupted"], counts["uncertain"], counts["claimed"])
+		if len(list) == 1 && list[0].RoutingMode == "round_robin" {
+			accountLabel = "unassigned"
+			message = "Distribution: no account selected. " + list[0].Message
+			if list[0].AccountID > 0 {
+				accountLabel = fmt.Sprint(list[0].AccountID)
+				message = "Distribution to account #" + accountLabel + ". " + list[0].Message
+			}
+		}
+		rows = append(rows, storage.AutomationReceipt{ID: id, ProfileID: list[0].ProfileID, AccountID: accountLabel, ContractID: list[0].ContractID, State: state, Message: message, UpdatedAt: list[0].FinishedAt.Format(time.RFC3339Nano)})
 	}
 	return rows, nil
 }

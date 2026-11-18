@@ -111,6 +111,7 @@ func (e *Engine) ReviewOneWayOCOLock(ctx context.Context, account int64, intentI
 		return err
 	}
 	e.disarm()
+	e.runWanted = false
 	e.runRequested = false
 	e.runMessage = "Paused"
 	e.message = ""
@@ -252,6 +253,7 @@ func (e *Engine) ReviewStaleQuoteLock(ctx context.Context, account int64, intent
 	}
 	e.staleQuoteReview = nil
 	e.disarm()
+	e.runWanted = false
 	e.runRequested = false
 	e.runMessage = "Paused"
 	e.message = ""

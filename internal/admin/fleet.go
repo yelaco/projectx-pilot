@@ -480,6 +480,7 @@ func (m *Manager) RuntimeStatus() execution.Status {
 	views, _ := m.fleet.Snapshot()
 	for _, r := range views {
 		s.RunRequested = s.RunRequested || r.Status.RunRequested
+		s.RecoveryPending = s.RecoveryPending || r.Status.RecoveryPending
 		s.Armed = s.Armed || r.Status.Armed
 		s.Intents = append(s.Intents, r.Status.Intents...)
 	}

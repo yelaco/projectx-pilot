@@ -5,6 +5,8 @@ import (
 	"github.com/yelaco/projectx-pilot/internal/execution"
 	"github.com/yelaco/projectx-pilot/internal/fleet"
 	"github.com/yelaco/projectx-pilot/internal/lockreview"
+	"github.com/yelaco/projectx-pilot/internal/signal"
+	"github.com/yelaco/projectx-pilot/internal/storage"
 	"strings"
 	"testing"
 )
@@ -39,5 +41,16 @@ func TestRunnerLockControlsFollowCurrentLockAndSession(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+func TestUnassignedDistributionDeliveryDoesNotRenderAccountZero(t *testing.T) {
+	v := view{Deliveries: []storage.Record{{Signal: signal.Signal{ID: "unassigned"}}}, DeliveryJobs: map[string][]storage.TargetJob{"unassigned": {{AccountID: 0, State: "blocked", Message: "No ready account"}}}}
+	var buf bytes.Buffer
+	if err := page.ExecuteTemplate(&buf, "deliveries", v); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(buf.String(), "<td>#0</td>") || !strings.Contains(buf.String(), "No account selected") {
+		t.Fatal("unassigned distribution displayed as a real account")
 	}
 }

@@ -34,3 +34,15 @@ func Classify(reason string) Info {
 		return Info{Category: "Unrecognized lock", Guidance: "This lock has no verified review policy. Inspect the original reason; no force-unlock is available."}
 	}
 }
+
+// AutoRecoverable identifies technical faults whose completed execution may be
+// released after fresh flat/no-order confirmation. It never waives live faults,
+// ambiguous writes, legacy repairs, unknown reasons or risk locks.
+func AutoRecoverable(reason string) bool {
+	switch Classify(reason).Category {
+	case "Exposure discrepancy", "Protection discrepancy", "Accounting data":
+		return true
+	default:
+		return false
+	}
+}

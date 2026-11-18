@@ -238,6 +238,9 @@ func appendAccountHealth(add func(HealthCheck), account int64, s execution.Statu
 	if s.Armed {
 		state = "ok"
 		summary = "Armed for new alerts; each order still requires fresh entry checks."
+	} else if s.RecoveryPending {
+		state = "attention"
+		summary = "The original Start is retained; waiting for fault recovery and fresh flat/account/market checks."
 	} else if s.RunRequested {
 		summary = "Start is requested; this account is waiting for readiness."
 	}
@@ -245,13 +248,13 @@ func appendAccountHealth(add func(HealthCheck), account int64, s execution.Statu
 		state = "blocked"
 		summary = "An existing execution occupies this account; new entries are blocked."
 	}
-	row("entries", "Entry readiness", state, summary, "Clearing a lock never arms, starts, or replays an alert.", s.ArmedAt)
+	row("entries", "Entry readiness", state, summary, "New entries require fresh arming and risk checks. Automatic recovery may resume a retained Start; no old alert is replayed.", s.ArmedAt)
 	quoteState, quoteSummary := "idle", "No active quote subscription is required at this point."
 	if s.Quotes.Contract != "" {
 		if s.Quotes.Fresh && healthFresh(s.Quotes.At, now, 5*time.Second) {
 			quoteState = "ok"
 			quoteSummary = "The existing market-data cache contains a fresh quote."
-		} else if s.Armed || active != nil && !active.Policy.PerTradeOnly {
+		} else if s.Armed || s.RecoveryPending || active != nil && !active.Policy.PerTradeOnly {
 			quoteState = "attention"
 			quoteSummary = "A required fresh quote is unavailable."
 		} else {

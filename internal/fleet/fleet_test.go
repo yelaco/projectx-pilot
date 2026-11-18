@@ -23,6 +23,7 @@ type gateway struct {
 	readHook        func(context.Context, int64) error
 	orders, history map[int64][]projectx.Order
 	positions       map[int64][]projectx.Position
+	trades          map[int64][]projectx.Trade
 	placed          map[int64]int
 	closed          map[int64]int
 	requests        map[int64]projectx.PlaceRequest
@@ -67,7 +68,9 @@ func (a accountAPI) Orders(context.Context, int64, time.Time, time.Time) ([]proj
 	return append([]projectx.Order{}, a.g.history[a.account]...), nil
 }
 func (a accountAPI) Trades(context.Context, int64, time.Time, time.Time) ([]projectx.Trade, error) {
-	return []projectx.Trade{}, nil
+	a.g.mu.Lock()
+	defer a.g.mu.Unlock()
+	return append([]projectx.Trade{}, a.g.trades[a.account]...), nil
 }
 func (a accountAPI) Place(ctx context.Context, r projectx.PlaceRequest) (int64, error) {
 	g := a.g
@@ -132,7 +135,7 @@ func setup(t *testing.T) (*Fleet, *storage.Inbox, *gateway, context.Context) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	g := &gateway{orders: map[int64][]projectx.Order{}, history: map[int64][]projectx.Order{}, positions: map[int64][]projectx.Position{}, placed: map[int64]int{}, closed: map[int64]int{}, requests: map[int64]projectx.PlaceRequest{}, now: now, next: 100, release: make(chan struct{})}
+	g := &gateway{orders: map[int64][]projectx.Order{}, history: map[int64][]projectx.Order{}, positions: map[int64][]projectx.Position{}, trades: map[int64][]projectx.Trade{}, placed: map[int64]int{}, closed: map[int64]int{}, requests: map[int64]projectx.PlaceRequest{}, now: now, next: 100, release: make(chan struct{})}
 	factory := func(account int64) (execution.API, execution.Quotes, error) {
 		return accountAPI{g, account}, quotes{now}, nil
 	}

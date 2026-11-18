@@ -85,6 +85,9 @@ type Intent struct {
 	AcknowledgedLockSnapshot string    `json:",omitempty"`
 	AcknowledgedLockAt       time.Time `json:",omitempty"`
 	ExposureObserved         bool      `json:",omitempty"`
+	// Pending reconciliation evidence, never verified protection or entry authority.
+	EntryFillPendingSince   time.Time `json:",omitempty"`
+	ObservedEntryFillVolume int       `json:",omitempty"`
 	// Historical evidence only. Never substitutes for fresh reconciliation or authorizes mutation.
 	VerifiedPosition   *projectx.Position `json:",omitempty"`
 	VerifiedAt         time.Time          `json:",omitempty"`
@@ -145,6 +148,7 @@ type Status struct {
 	Quotes                                     realtime.QuoteStatus
 
 	SubmissionDetail         *SubmissionDetail `json:",omitempty"`
+	RecoveryPending          bool
 	RunRequested             bool
 	RunProfileID, RunMessage string
 	Automated                bool

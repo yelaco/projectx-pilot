@@ -7,8 +7,8 @@ Connect TradingView alerts to account-specific execution runners, manage risk po
 ## Features
 
 - **Automation profiles** — webhook URLs, delivery tokens, and BUY/SELL message templates for each strategy.
-- **Multiple accounts** — route one signal to several accounts, or run separate profiles on different accounts.
-- **Trade managers** — calculate whole-contract position sizes from stop distance, planned risk, fees, and slippage.
+- **Multiple accounts** — copy signals to all targets or distribute them round-robin among ready accounts; run separate profiles on distinct accounts.
+- **Trade managers** — calculate whole-contract position sizes from stop distance, default or per-account planned risk, fees, and slippage.
 - **Execution monitoring** — track orders, positions, protection, delivery outcomes, logs, and acceptance latency.
 - **Trading schedules** — general and per-manager operation days, session cutoffs, and US FOMC filtering.
 - **Local controls** — pause entries or request emergency flattening globally, per profile, or per account.
@@ -46,10 +46,12 @@ One running profile owns each account, with up to 20 targets per Trade Manager. 
 | Guide | What you'll find |
 | --- | --- |
 | [Automation setup](docs/automatic-execution.md) | Profiles, account runners, routing, and updates |
+| [Signal distribution](docs/signal-distribution.md) | Copy versus round-robin allocation, readiness and durable rotation |
 | [Dashboard](docs/admin-guide.md) | Configuration, monitoring, and administrator access |
 | [Webhook delivery](docs/named-tunnel-setup.md) | Permanent HTTPS hostname and tunnel setup |
 | [Risk and recovery](docs/risk-management.md) · [Recovery procedures](docs/recovery-procedures.md) | Sizing, protection, failure handling, and restart behavior |
 | [Linux deployment](docs/deployment-archlinux.md) | Services, logs, upgrades, and laptop operation |
 | [Architecture](docs/architecture.md) · [Development](docs/development.md) | System design, builds, and tests |
+| [ProjectX Yelaco platform plan](docs/platform-plan.md) | Future platform scope, separate algorithms/webhooks, reliability and ProjectX-only cost target; planning only |
 
 ProjectX Pilot is an independent community project, unaffiliated with ProjectX or Topstep. Local execution does not establish permission for a remote-signal workflow; review the [provider-policy boundaries](docs/topstep-compliance.md) before enabling it.

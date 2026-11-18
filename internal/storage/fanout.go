@@ -14,6 +14,7 @@ import (
 )
 
 type TargetJob struct {
+	RoutingMode                                                                     string `json:",omitempty"`
 	ID, DeliveryID, ProfileID, ContractID                                           string
 	AccountID                                                                       int64
 	State, Message, Policy                                                          string

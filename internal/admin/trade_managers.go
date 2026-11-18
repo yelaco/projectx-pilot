@@ -12,6 +12,12 @@ func (m *Manager) SaveTradeManager(profile risk.Profile) error {
 	defer m.mu.Unlock()
 	// Older clients omit schedule fields; they must not erase a custom schedule.
 	for _, old := range m.policies.TradeManagers {
+		if old.ID == profile.ID && profile.Routing == "multiple" && profile.AccountRiskOverrides == nil {
+			profile.AccountRiskOverrides = old.Clone().AccountRiskOverrides
+		}
+		if old.ID == profile.ID && profile.Routing == "multiple" && profile.MultiAccountMode == "" {
+			profile.MultiAccountMode = old.MultiAccountMode
+		}
 		if old.ID == profile.ID && profile.Schedule == nil && old.Schedule != nil {
 			schedule := *old.Schedule
 			profile.Schedule = &schedule

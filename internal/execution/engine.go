@@ -36,6 +36,10 @@ type Engine struct {
 	managerOperationDays     map[string][]string
 	operationDays            []string
 	submissionDetail         *SubmissionDetail
+	runWanted                bool
+	runStartedAt             time.Time
+	recoveryFlatAt           time.Time
+	recoveryKey              string
 	runRequested             bool
 	runProfileID, runMessage string
 	armedAt                  time.Time
@@ -116,6 +120,8 @@ func (e *Engine) Pause() {
 	defer e.publishLocked()
 	e.disarm()
 	e.runRequested = false
+	e.runWanted = false
+	e.recoveryFlatAt = time.Time{}
 	e.runMessage = "Paused"
 	e.paused = true
 	select {
@@ -129,7 +135,10 @@ func (e *Engine) Status() Status {
 	return e.snapshotLocked()
 }
 func (e *Engine) snapshotLocked() Status {
-	s := Status{MonitorRunning: e.ctx != nil && e.ctx.Err() == nil, LastReconcileAttempt: e.lastReconcileAttempt, LastReconcileSuccess: e.lastReconcileSuccess, ReconcileError: e.reconcileError, ProtectionCheck: e.protectionCheck, ProtectionCheckedAt: e.protectionCheckedAt, Quotes: e.quoteStatusLocked(), RunRequested: e.runRequested, RunProfileID: e.runProfileID, RunMessage: e.runMessage, Automated: e.config.Automated, AutomationProfileID: e.config.AutomationProfileID, ArmedAt: e.armedAt, Enabled: e.config.Enabled, Armed: e.now().Before(e.armedUntil), AccountID: e.config.AccountID, ArmedUntil: e.armedUntil, Error: e.message, Intents: append([]Intent(nil), e.intents...)}
+	s := Status{MonitorRunning: e.ctx != nil && e.ctx.Err() == nil, LastReconcileAttempt: e.lastReconcileAttempt, LastReconcileSuccess: e.lastReconcileSuccess, ReconcileError: e.reconcileError, ProtectionCheck: e.protectionCheck, ProtectionCheckedAt: e.protectionCheckedAt, Quotes: e.quoteStatusLocked(), RecoveryPending: e.runWanted && !e.runRequested, RunRequested: e.runRequested, RunProfileID: e.runProfileID, RunMessage: e.runMessage, Automated: e.config.Automated, AutomationProfileID: e.config.AutomationProfileID, ArmedAt: e.armedAt, Enabled: e.config.Enabled, Armed: e.now().Before(e.armedUntil), AccountID: e.config.AccountID, ArmedUntil: e.armedUntil, Error: e.message, Intents: append([]Intent(nil), e.intents...)}
+	if s.RecoveryPending && !strings.Contains(strings.ToLower(s.RunMessage), "recovery") {
+		s.RunMessage = "Waiting for recovery · " + s.RunMessage
+	}
 	if source, ok := e.quotes.(interface {
 		Inspect(string) realtime.QuoteStatus
 	}); ok {
@@ -230,6 +239,7 @@ func (e *Engine) Arm(ctx context.Context, c Config, p risk.Profile, a Authorizat
 	}
 	e.disarm()
 	if !c.Automated {
+		e.runWanted = false
 		e.runRequested = false
 	}
 	if c.Automated && (!a.AutomationConfirmed || c.AutomationProfileID == "" || c.AutomationContractID == "") {
@@ -747,6 +757,9 @@ func (e *Engine) RequestRun(profile string) error {
 		e.disarm()
 	}
 
+	e.runWanted = true
+	e.runStartedAt = e.now().UTC()
+	e.recoveryFlatAt = time.Time{}
 	e.runRequested = true
 	e.runProfileID = profile
 	e.runMessage = "Starting; checking account and market hours"
@@ -755,6 +768,9 @@ func (e *Engine) RequestRun(profile string) error {
 func (e *Engine) SetRunMessage(message string) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if strings.HasPrefix(message, "Running") && !e.runRequested && !e.runWanted {
+		return
+	}
 	defer e.publishLocked()
 	e.runMessage = message
 }

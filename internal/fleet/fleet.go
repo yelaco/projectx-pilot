@@ -508,7 +508,7 @@ func (f *Fleet) arm(r *runner) {
 	p := r.plan
 	permission := r.permission
 	started := r.since
-	if !s.RunRequested {
+	if !s.RunRequested && !s.RecoveryPending {
 		if s.RunProfileID == r.owner {
 			r.requested = false
 			if r.revoke != nil {
@@ -526,7 +526,19 @@ func (f *Fleet) arm(r *runner) {
 		f.mu.Unlock()
 		return
 	}
-	r.retry = f.now().Add(15 * time.Second)
+	retryDelay := 15 * time.Second
+	if s.RecoveryPending {
+		running := 0
+		for _, account := range f.accounts {
+			if account.requested {
+				running++
+			}
+		}
+		if scaled := time.Duration(running) * 3 * time.Second; scaled > retryDelay {
+			retryDelay = scaled
+		}
+	}
+	r.retry = f.now().Add(retryDelay)
 	f.mu.Unlock()
 	w, open, err := p.Policy.TradingSchedule().Window(f.now())
 	if err != nil {
@@ -536,6 +548,19 @@ func (f *Fleet) arm(r *runner) {
 	if !open {
 		r.engine.SetRunMessage("Running · market closed; waiting for the next verified session")
 		return
+	}
+	if !s.RunRequested && s.RecoveryPending {
+		check, cancel := context.WithTimeout(permission, 15*time.Second)
+		recovered, recoveryErr := r.engine.ResumeAfterRecovery(check, p.ProfileID, w.ID())
+		cancel()
+		if recoveryErr != nil {
+			r.engine.SetRunMessage("Running · waiting for recovery: " + recoveryErr.Error())
+			return
+		}
+		if !recovered {
+			r.engine.SetRunMessage("Running · waiting for a second fresh flat/no-order observation")
+			return
+		}
 	}
 	locked, err := f.store.ExecutionLock(strconv.FormatInt(r.id, 10), w.ID())
 	if err != nil {
@@ -562,9 +587,11 @@ func (f *Fleet) arm(r *runner) {
 	c.Automated = true
 	c.AutomationProfileID = p.ProfileID
 	c.AutomationContractID = p.ContractID
-	policy := p.Policy
-	policy.Routing = "single"
-	policy.AccountIDs = []int64{r.id}
+	policy, policyErr := p.Policy.ForAccount(r.id)
+	if policyErr != nil {
+		r.engine.SetRunMessage("Running · account risk configuration invalid")
+		return
+	}
 	a := execution.Authorization{Continuous: true, AutomationConfirmed: true, Window: w, Floor: p.Floor, PracticeConfirmed: true, BracketsConfirmed: true, FloorConfirmed: true}
 	ctx, cancel := context.WithTimeout(permission, 15*time.Second)
 	err = r.engine.Arm(ctx, c, policy, a)
@@ -594,6 +621,9 @@ func jobID(profile, delivery string, account int64) string {
 func (f *Fleet) Dispatch(record storage.Record, p Plan) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if err := p.Policy.Validate(); err != nil {
+		return err
+	}
 	received, err := time.Parse(time.RFC3339Nano, record.ReceivedAt)
 	if err != nil {
 		return errors.New("invalid inbox receipt timestamp")
@@ -603,10 +633,28 @@ func (f *Fleet) Dispatch(record storage.Record, p Plan) error {
 	tasks := map[int64]*runner{}
 	for _, account := range p.Targets() {
 		j := storage.TargetJob{ID: jobID(p.ProfileID, record.Signal.ID, account), DeliveryID: record.Signal.ID, ProfileID: p.ProfileID, ContractID: p.ContractID, AccountID: account, Policy: string(policy), ReceivedAt: received, ClaimedAt: f.now().UTC()}
+		j.RoutingMode = p.Policy.DistributionMode()
 		jobs = append(jobs, j)
 		tasks[account] = f.accounts[account]
 	}
-	if err := f.store.ClaimTargets(jobs); err != nil {
+	if p.Policy.DistributionMode() == "round_robin" {
+		eligible := map[int64]bool{}
+		for _, job := range jobs {
+			r := tasks[job.AccountID]
+			eligible[job.AccountID] = f.dispatchBlockReason(r, record, p, received) == "" && r != nil && !r.busy.Load()
+		}
+		selected, claimErr := f.store.ClaimRoundRobin(p.Policy.ID, jobs, eligible)
+		if errors.Is(claimErr, storage.ErrDuplicate) {
+			return nil
+		}
+		if claimErr != nil {
+			return claimErr
+		}
+		if selected.AccountID == 0 {
+			return nil
+		} // Durable blocked outcome; never queued/replayed.
+		jobs = []storage.TargetJob{selected}
+	} else if err := f.store.ClaimTargets(jobs); err != nil {
 		if errors.Is(err, storage.ErrDuplicate) {
 			return nil
 		}
@@ -614,40 +662,7 @@ func (f *Fleet) Dispatch(record storage.Record, p Plan) error {
 	}
 	for _, j := range jobs {
 		r := tasks[j.AccountID]
-		reason := ""
-		age := p.Config.SignalMaxAge
-		if age <= 0 {
-			age = 5 * time.Minute
-		}
-		if err := record.Signal.ValidateSchema(f.now(), age); err != nil {
-			reason = err.Error()
-		}
-		allowed := false
-		for _, sym := range p.Instruments {
-			if sym == record.Signal.Symbol {
-				allowed = true
-			}
-		}
-		if record.Status != "pending_review" || record.AccountID != "" || record.ContractID != "" {
-			reason = "Delivery is not an unassigned webhook alert"
-		}
-		if record.ProfileID != p.ProfileID || record.Signal.Strategy != p.Strategy || !allowed {
-			reason = "Signal does not match the frozen profile strategy/instrument"
-		}
-		if f.paused {
-			reason = "Global entry pause was active when this delivery was claimed"
-		}
-		if r == nil || !r.requested || r.owner != p.ProfileID || r.plan.Scope != p.Scope {
-			reason = "Profile/account was not started with this exact scope; no delayed replay"
-		} else {
-			s, _ := r.status.Load().(execution.Status)
-			if !s.Armed || received.Before(r.since) || received.Before(s.ArmedAt) || record.Signal.Timestamp.Before(r.since) || received.After(f.now().Add(time.Second)) {
-				reason = "Delivery arrived before arming or outside an eligible session; no delayed replay"
-			}
-			if active(s) {
-				reason = "Account already has a working or unresolved execution"
-			}
-		}
+		reason := f.dispatchBlockReason(r, record, p, received)
 		if reason != "" {
 			j.State = "blocked"
 			j.Message = reason
@@ -680,6 +695,47 @@ func (f *Fleet) Dispatch(record storage.Record, p Plan) error {
 	}
 	return nil
 }
+
+// Caller holds f.mu. Snapshot readiness only selects a target; authoritative
+// broker/risk checks still run immediately before that target can submit.
+func (f *Fleet) dispatchBlockReason(r *runner, record storage.Record, p Plan, received time.Time) string {
+	reason := ""
+	age := p.Config.SignalMaxAge
+	if age <= 0 {
+		age = 5 * time.Minute
+	}
+	if err := record.Signal.ValidateSchema(f.now(), age); err != nil {
+		reason = err.Error()
+	}
+	allowed := false
+	for _, sym := range p.Instruments {
+		if sym == record.Signal.Symbol {
+			allowed = true
+		}
+	}
+	if record.Status != "pending_review" || record.AccountID != "" || record.ContractID != "" {
+		reason = "Delivery is not an unassigned webhook alert"
+	}
+	if record.ProfileID != p.ProfileID || record.Signal.Strategy != p.Strategy || !allowed {
+		reason = "Signal does not match the frozen profile strategy/instrument"
+	}
+	if f.paused {
+		reason = "Global entry pause was active when this delivery was claimed"
+	}
+	if r == nil || !r.requested || r.owner != p.ProfileID || r.plan.Scope != p.Scope {
+		reason = "Profile/account was not started with this exact scope; no delayed replay"
+	} else {
+		s, _ := r.status.Load().(execution.Status)
+		if !s.MonitorRunning || !s.RunRequested || !s.Armed || !f.now().Before(s.ArmedUntil) || received.Before(r.since) || received.Before(s.ArmedAt) || record.Signal.Timestamp.Before(r.since) || received.After(f.now().Add(time.Second)) {
+			reason = "Delivery arrived before arming or outside an eligible session; no delayed replay"
+		}
+		if active(s) {
+			reason = "Account already has a working or unresolved execution"
+		}
+	}
+	return reason
+}
+
 func (f *Fleet) execute(r *runner, t task) {
 	defer r.busy.Store(false)
 	j := t.job

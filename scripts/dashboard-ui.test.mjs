@@ -8,6 +8,8 @@ const source=fs.readFileSync(new URL('../internal/dashboard/admin.js',import.met
 function browser(html, response={}) {
  const {document,window}=parseHTML('<html><body>'+html+'</body></html>');
  Object.defineProperty(document,'hidden',{value:false,writable:true});
+ // linkedom does not initialize the browser's checkbox checked property.
+ document.querySelectorAll('input[type="checkbox"]').forEach(node=>{if(typeof node.checked!=='boolean')node.checked=node.hasAttribute('checked');});
  const timers=[];
  const context={document,window,console,AbortController,navigator:{clipboard:{writeText:async()=>{}}},setTimeout:(fn,ms)=>{timers.push({fn,ms});return timers.length},clearTimeout:()=>{},fetch:async()=>({ok:true,json:async()=>response})};
  vm.createContext(context);vm.runInContext(source+'\n globalThis.ui={monitor,updateRunnerLock,updateReportStatus,renderSystemHealth,filterSystemHealth};',context);
@@ -61,4 +63,18 @@ test('Practice monitor uses manual exposure instead of automatic account exposur
 });
 test('profile rejection details come from that profile',async()=>{
  const b=browser('<section data-profile-execution-scope="p"><p data-submission-reason="one"></p></section>',monitorResponse({Execution:{SubmissionDetail:{IntentID:'other',Reason:'wrong account'}},Profiles:{p:{SubmissionDetail:{IntentID:'one',Reason:'scoped reason'}}}}));await b.ui.monitor();assert.match(b.document.querySelector('p').textContent,/scoped reason/);assert.doesNotMatch(b.document.querySelector('p').textContent,/wrong account/);
+});
+test('multi-account mode control follows routing without overwriting the chosen mode',()=>{
+ const b=browser('<select data-trade-manager-routing><option value="single" selected>Single</option><option value="multiple">Multiple</option></select><label data-multi-account-options><select name="multi_account_mode"><option value="round_robin" selected>Distribution</option></select></label>');
+ const group=b.document.querySelector('[data-multi-account-options]');const mode=group.querySelector('select');assert.equal(group.hidden,true);assert.equal(mode.disabled,true);
+ const routing=b.document.querySelector('[data-trade-manager-routing]');routing.querySelector('[value="single"]').removeAttribute('selected');routing.querySelector('[value="multiple"]').setAttribute('selected','');routing.dispatchEvent(new b.context.window.Event('change'));
+ assert.equal(group.hidden,false);assert.equal(mode.disabled,false);assert.equal(mode.value,'round_robin');
+});
+test('unassigned distribution outcome never displays fictitious account zero',async()=>{
+ const b=browser('<table><tbody id="target-job-rows"></tbody></table>',monitorResponse({TargetJobs:[{AccountID:0,DeliveryID:'no-ready',ProfileID:'p',RoutingMode:'round_robin',State:'blocked',Message:'No ready account'}]}));await b.ui.monitor();const text=b.document.querySelector('tbody').textContent;assert.match(text,/No account selected/);assert.match(text,/Distribution/);assert.doesNotMatch(text,/#0/);
+});
+test('account risk inputs follow selected accounts and routing while retaining edits',()=>{
+ const b=browser('<select data-trade-manager-routing><option value="multiple" selected>Multiple</option><option value="single">Single</option></select><input type="checkbox" name="account_ids" value="42" checked><input type="checkbox" name="account_ids" value="43"><div data-account-risk-overrides><input data-account-risk="42" value="36"><input data-account-risk="43" value="72"></div>');
+ const first=b.document.querySelector('[data-account-risk="42"]');const second=b.document.querySelector('[data-account-risk="43"]');assert.equal(first.disabled,false);assert.equal(second.disabled,true);
+ const selected=b.document.querySelector('[name="account_ids"][value="43"]');selected.checked=true;selected.dispatchEvent(new b.context.window.Event('change'));assert.equal(second.disabled,false);assert.equal(second.value,'72');
 });

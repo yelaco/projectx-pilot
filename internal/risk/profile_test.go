@@ -52,3 +52,61 @@ func TestLegacyDefaultScheduleKeepsPolicyJSONScope(t *testing.T) {
 		t.Fatal("default schedule changed saved identity", err)
 	}
 }
+
+func TestMultiAccountDistributionIsExplicitAndDefaultsToCopy(t *testing.T) {
+	p := Defaults()
+	p.ID = "manager"
+	p.Name = "Manager"
+	p.Routing = "multiple"
+	p.AccountIDs = []int64{1, 2}
+	p.PerTradeOnly = true
+	if p.DistributionMode() != "copy" || p.Validate() != nil {
+		t.Fatal("legacy policy did not retain copy semantics")
+	}
+	p.MultiAccountMode = "round_robin"
+	if err := p.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	p.Routing = "single"
+	p.AccountIDs = []int64{1}
+	if p.Validate() == nil {
+		t.Fatal("round robin silently reduced to one account")
+	}
+	p.Routing = "multiple"
+	p.AccountIDs = []int64{1, 2}
+	p.MultiAccountMode = "unknown"
+	if p.Validate() == nil {
+		t.Fatal("unknown routing mode accepted")
+	}
+}
+
+func TestAccountRiskOverridesValidateCloneAndFreezeIndependently(t *testing.T) {
+	p := Defaults()
+	p.ID = "manager"
+	p.Name = "Manager"
+	p.Routing = "multiple"
+	p.AccountIDs = []int64{1, 2, 3}
+	p.PerTradeOnly = true
+	p.AccountRiskOverrides = map[int64]float64{1: 36, 2: 72}
+	for account, want := range map[int64]float64{1: 36, 2: 72, 3: 150} {
+		scoped, err := p.ForAccount(account)
+		if err != nil || scoped.MaxRiskPerTrade != want || len(scoped.AccountIDs) != 1 || scoped.AccountIDs[0] != account || scoped.AccountRiskOverrides != nil {
+			t.Fatal("wrong account policy", account, scoped, err)
+		}
+	}
+	cloned := p.Clone()
+	cloned.AccountRiskOverrides[1] = 999
+	if p.AccountRiskOverrides[1] != 36 {
+		t.Fatal("cloned manager shares risk override map")
+	}
+	if _, err := p.ForAccount(99); err == nil {
+		t.Fatal("scoped an unauthorized account")
+	}
+	for _, values := range []map[int64]float64{{99: 50}, {1: 0}, {1: -1}, {1: math.NaN()}, {1: math.Inf(1)}} {
+		invalid := p.Clone()
+		invalid.AccountRiskOverrides = values
+		if invalid.Validate() == nil {
+			t.Fatal("invalid override accepted", values)
+		}
+	}
+}

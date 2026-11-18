@@ -10,10 +10,12 @@ import (
 )
 
 type Profile struct {
+	AccountRiskOverrides   map[int64]float64 `json:"account_risk_overrides,omitempty"`
 	Schedule               *session.Schedule `json:"schedule,omitempty"`
 	PerTradeOnly           bool              `json:"per_trade_only,omitempty"`
 	ID                     string            `json:"id"`
 	Name                   string            `json:"name"`
+	MultiAccountMode       string            `json:"multi_account_mode,omitempty"`
 	Routing                string            `json:"routing"`
 	AccountIDs             []int64           `json:"account_ids"`
 	MaxRiskPerTrade        float64           `json:"max_risk_per_trade"`
@@ -28,6 +30,13 @@ type Profile struct {
 func Defaults() Profile {
 	return Profile{Routing: "single", MaxRiskPerTrade: 150, MaxDailyLoss: 450, MaxTradesPerSession: 6, MaxConcurrentPositions: 1, MaxOpenRisk: 150, MaxSignalRisk: 150, TargetProfit: 200}
 }
+func (p Profile) DistributionMode() string {
+	if p.MultiAccountMode == "" {
+		return "copy"
+	}
+	return p.MultiAccountMode
+}
+
 func (p Profile) HasAccount(id int64) bool {
 	for _, a := range p.AccountIDs {
 		if a == id {
@@ -45,6 +54,12 @@ func (p Profile) Validate() error {
 			return errors.New("trade manager ID must use lowercase letters, digits, hyphens or underscores")
 		}
 	}
+	if p.DistributionMode() != "copy" && p.DistributionMode() != "round_robin" {
+		return errors.New("multi-account mode must be copy or round_robin")
+	}
+	if p.Routing != "multiple" && p.DistributionMode() == "round_robin" {
+		return errors.New("round-robin distribution requires multiple-account routing")
+	}
 	if p.Routing != "single" && p.Routing != "multiple" {
 		return errors.New("routing must be single or multiple accounts")
 	}
@@ -57,6 +72,9 @@ func (p Profile) Validate() error {
 			return errors.New("account IDs must be positive and unique")
 		}
 		seen[a] = true
+	}
+	if err := p.validateAccountRisk(); err != nil {
+		return err
 	}
 	if !positive(p.MaxRiskPerTrade) {
 		return errors.New("maximum risk per trade must be a finite positive amount")
@@ -93,6 +111,13 @@ func (p Profile) TradingSchedule() session.Schedule {
 	return *p.Schedule
 }
 func (p Profile) Clone() Profile {
+	if p.AccountRiskOverrides != nil {
+		copy := make(map[int64]float64, len(p.AccountRiskOverrides))
+		for account, value := range p.AccountRiskOverrides {
+			copy[account] = value
+		}
+		p.AccountRiskOverrides = copy
+	}
 	p.AccountIDs = append([]int64(nil), p.AccountIDs...)
 	if p.Schedule != nil {
 		schedule := *p.Schedule

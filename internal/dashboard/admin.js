@@ -172,7 +172,7 @@ async function monitor() {
    updateRunnerLock(row,runner);
    const status = runner.Status || {};
    const state = row.querySelector('[data-runner-state]');
-   if (state) state.textContent = (runner.Busy ? 'Processing delivery' : status.Armed ? 'Armed' : status.RunRequested ? 'Waiting' : 'Paused / recovery') + ' · ' + (status.RunMessage || '');
+   if (state) state.textContent = (runner.Busy ? 'Processing delivery' : status.Armed ? 'Armed' : status.RecoveryPending ? 'Waiting for recovery' : status.RunRequested ? 'Waiting' : 'Paused / recovery') + ' · ' + (status.RunMessage || '');
    const management = row.querySelector('[data-runner-management]');
    if (management) management.textContent = [status.Error || '', status.SubmissionDetail?.Reason ? 'ProjectX rejection reason: ' + status.SubmissionDetail.Reason : '', ...(status.Intents || []).filter(i => !['closed','cancelled','rejected'].includes(i.State)).map(i => (i.Signal?.symbol || '') + ' ' + (i.Signal?.direction || '') + ' ' + i.State + ' · order #' + i.OrderID + ' · ' + i.Message)].join(' ');
  }
@@ -182,7 +182,7 @@ async function monitor() {
    const duration = (a,b) => !a || !b || a.startsWith('0001') || b.startsWith('0001') ? '—' : (Date.parse(b)-Date.parse(a)).toFixed(1) + ' ms';
    for (const job of (v.TargetJobs || []).slice(0,100)) {
      const tr = document.createElement('tr');
-     for (const value of [job.DeliveryID + ' / ' + job.ProfileID, '#' + job.AccountID, job.State + ' · ' + job.Message, duration(job.ReceivedAt,job.DispatchedAt),duration(job.ChecksAt,job.SubmitAt),duration(job.SubmitAt,job.AcceptedAt),duration(job.ReceivedAt,job.AcceptedAt)]) {
+     for (const value of [job.DeliveryID + ' / ' + job.ProfileID, job.AccountID ? '#' + job.AccountID : 'No account selected', (job.RoutingMode === 'round_robin' ? 'Distribution · ' : '') + job.State + ' · ' + job.Message, duration(job.ReceivedAt,job.DispatchedAt),duration(job.ChecksAt,job.SubmitAt),duration(job.SubmitAt,job.AcceptedAt),duration(job.ReceivedAt,job.AcceptedAt)]) {
        const td = document.createElement('td');td.textContent=value;tr.appendChild(td);
      }
      targets.appendChild(tr);
@@ -253,3 +253,25 @@ function updateSessionMode() {
 }
 sessionMode?.addEventListener('change', updateSessionMode);
 updateSessionMode();
+
+const tradeManagerRouting = document.querySelector('[data-trade-manager-routing]');
+function updateTradeManagerRouting() {
+  if (!tradeManagerRouting) return;
+  const multiple = tradeManagerRouting.value === 'multiple';
+  document.querySelectorAll('[data-multi-account-options]').forEach(group => {
+    group.hidden = !multiple;
+    group.querySelectorAll('select').forEach(select => select.disabled = !multiple);
+  });
+  document.querySelectorAll('[data-account-risk-overrides]').forEach(group => {
+    group.hidden = !multiple;
+    group.querySelectorAll('textarea').forEach(field => field.disabled = !multiple);
+  });
+  document.querySelectorAll('[data-account-risk]').forEach(field => {
+    const checkbox = document.querySelector('input[name="account_ids"][value="' + field.dataset.accountRisk + '"]');
+    field.disabled = !multiple || !checkbox?.checked;
+  });
+}
+tradeManagerRouting?.addEventListener('change', updateTradeManagerRouting);
+updateTradeManagerRouting();
+
+document.querySelectorAll('input[name="account_ids"]').forEach(field => field.addEventListener('change', updateTradeManagerRouting));

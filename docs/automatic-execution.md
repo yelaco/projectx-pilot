@@ -72,3 +72,9 @@ Offline tests cover real HTTP receiver → SQLite → Unix wake → dispatcher �
 ## Operator-only exits
 
 The legacy schedule field named `flatten` is an exit reminder, not an automatic exit. Risk thresholds, protection discrepancies and technical errors only pause/report. Last verified exposure persists across restart as historical evidence and cannot authorize trading or prove flatness. Only password-confirmed local emergency Flatten controls may close exposure or cancel protection. Broker SL/TP executes independently. Legacy daily-loss/floor policies no longer enforce exits or guarantee account-floor protection. Optional Discord reports are configured in Connection settings; see [attention reports](attention-reports.md).
+
+## Recovery and signal allocation
+
+A Start made in the current process can wait through technical pauses and resume after resolved execution history, two fresh flat/no-order observations, fresh market/account checks and ordinary session/risk arming. Manual Pause, emergency Flatten, configuration revocation and restart cancel that running choice. Non-overridable risk locks and ambiguous/legacy repair cases are not waived. See [automatic recovery](order-lifecycle.md#automatic-recovery-of-a-running-profile).
+
+Multi-account Trade Managers now offer Copy (every configured target) or Distribution (one ready target per signal, round-robin). Existing configurations default to Copy. No-ready alerts remain durably blocked; failures after selection never trigger a fallback. See [signal distribution](signal-distribution.md).

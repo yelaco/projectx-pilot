@@ -27,3 +27,25 @@ The first management trigger (`HaltReason`) and typed order observations (`HaltO
 ## Account-scoped fanout
 
 Each target has its own lifecycle, frozen risk policy and deterministic local intent ID linked to the original delivery ID. SQLite allows active intents on different accounts and forbids two on one account. All account targets are claimed atomically before bounded independent dispatch. Accepted, blocked, uncertain and interrupted target outcomes are separate from later fill/protection state. Failure on one account does not cancel another account's successful trade. Socket notifications never carry trading authority. Restart recovers every account's intent and never replays target placement. Timing records separate arrival/dispatch, preflight, submission and gateway acknowledgement. See [architecture](architecture.md).
+
+## Entry-fill observation lag
+
+Order history, working orders and positions are separate broker reads, not an atomic snapshot. A position can therefore be visible before the parent order's reported fill quantity catches up.
+
+When the selected contract, direction and position quantity fit the durable intent and current linked SL/TP passes verification, a position larger than the reported entry fill enters `reconciling`. The active intent continues blocking all new entries. Pilot persists the pending timestamp and last reported parent fill quantity, and schedules another normal reconciliation within two seconds without issuing immediate retry requests or mutating orders. Protection remains unknown in health telemetry until a complete reconciliation succeeds.
+
+If a fresh observation at least two seconds later still disagrees, Pilot records the existing exposure-discrepancy attention lock and pauses entries. Repeated event wakes cannot shorten this minimum observation window. A backwards clock also fails closed. If the history catches up, normal verification resumes without creating a fault lock or clearing the operator's running choice. Restart preserves pending evidence but never restores arming or the running choice.
+
+This window does not defer wrong-contract, wrong-direction, excess/invalid quantity, missing/inconsistent protection, or existing attention/risk locks. A confirmed lock still requires its existing review procedure; later recovery never silently clears it, and original triggers remain retained. No automatic closing, protective cancellation, order retry, broker probe or legacy lock repair was added. Historical locks are not retroactively cleared by this change.
+
+## Automatic recovery of a running profile
+
+An explicit Start is now retained in process memory separately from temporary engine arming. A technical pause shows `RecoveryPending` / “Waiting for recovery”; it does not discard that Start. Operator Pause, emergency Flatten, relevant configuration edits, shutdown and restart revoke it. Nothing restores a Start from disk.
+
+While an execution is active, uncertain, submitting or needs emergency reconciliation, the account stays occupied and no new entry is armed. After terminal reconciliation, the controller requires two fresh flat/no-working-order observations at least three seconds apart, eligible account identity and fresh market data. It then performs the ordinary full arming/risk/session checks again. Availability failures reset the observation pair. Recovery observations use the existing bounded runner retry cadence; they are not extra health-check probes.
+
+Known technical exposure/protection/accounting locks may be released automatically only for a matching closed execution created under that same in-process Start, account, profile, contract and session. SQLite compares the exact unchanged execution payload and lock reason, rejects any active account intent or risk/emergency evidence, and atomically records an `execution_lock_recoveries` audit entry. It does not alter the original trigger, history, acknowledgements, ownership, intent/placement claims or mutation latches. This is evidence of a resolved fault, not acknowledgement of a continuing one.
+
+Daily-loss/trade-count/liquidation locks, ambiguous-write/unknown reasons and legacy stale-quote/OCO repairs are not automatically waived. A later verified session may pass its own normal checks without removing the previous session's risk lock. Specialized legacy repairs still revoke running permission and require another explicit Start. Historical locks predating this Start still require review. Protection verification for an open position never authorizes adding another entry.
+
+Rearming has a new arming timestamp: alerts received before recovery or while disarmed remain blocked and are never replayed or reassigned. Recovery does not place, close, cancel or modify broker orders. Existing positions and their SL/TP remain operator-controlled.

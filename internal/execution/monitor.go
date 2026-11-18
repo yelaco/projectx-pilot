@@ -14,6 +14,7 @@ import (
 func (e *Engine) Run(ctx context.Context) {
 	e.mu.Lock()
 	e.ctx = ctx
+	e.runWanted = false
 	e.runRequested = false
 	e.disarm()
 	e.publishLocked()
@@ -24,6 +25,7 @@ func (e *Engine) Run(ctx context.Context) {
 		defer e.mu.Unlock()
 		e.disarm()
 		e.ctx = nil
+		e.runWanted = false
 		e.runRequested = false
 		if e.quotes != nil {
 			e.quotes.Close()
@@ -98,7 +100,11 @@ func (e *Engine) monitorDelayLocked() time.Duration {
 	if i.OrderType == 1 {
 		age = 30 * time.Minute
 	}
-	for _, deadline := range []time.Time{i.Window.LastEntry, i.Window.Flatten, i.Signal.Timestamp.Add(age)} {
+	deadlines := []time.Time{i.Window.LastEntry, i.Window.Flatten, i.Signal.Timestamp.Add(age)}
+	if !i.EntryFillPendingSince.IsZero() {
+		deadlines = append(deadlines, i.EntryFillPendingSince.Add(2*time.Second))
+	}
+	for _, deadline := range deadlines {
 		if remaining := deadline.Sub(e.now()); remaining > 0 && remaining < delay {
 			delay = remaining
 		}
@@ -147,6 +153,7 @@ func (e *Engine) reconcile(ctx context.Context, i *Intent) error {
 		return e.requireAttention(i, "accepted order differs from durable intent")
 	}
 	i.OrderID = parent.ID
+	i.ObservedEntryFillVolume = parent.FillVolume
 	if parent.FillVolume > 0 {
 		i.ExposureObserved = true
 	}
@@ -200,6 +207,7 @@ func (e *Engine) reconcile(ctx context.Context, i *Intent) error {
 		return e.requireAttention(i, "unexpected concurrent account exposure")
 	}
 	if len(positions) == 0 {
+		i.EntryFillPendingSince = time.Time{}
 		// Flat observations are not assumed to mean a fill already closed. Require
 		// explicit terminal parent state and a second flat observation after 3 sec.
 		if parent.Status == 3 || parent.Status == 4 || parent.Status == 5 || parent.Status == 2 {
@@ -247,7 +255,7 @@ func (e *Engine) reconcile(ctx context.Context, i *Intent) error {
 	}
 	i.FlatSince = time.Time{}
 	p := positions[0]
-	if p.ContractID != i.Contract.ID || p.Size > i.Plan.Quantity || p.Type != positionType(i.Signal.Direction) || p.Size > parent.FillVolume {
+	if p.ContractID != i.Contract.ID || p.Size > i.Plan.Quantity || p.Type != positionType(i.Signal.Direction) || p.Size < 1 || parent.FillVolume < 0 || parent.FillVolume > parent.Size {
 		return e.requireAttention(i, "position exposure differs from observed entry fills")
 	}
 	if err = verifyProtection(*i, p, orders); err != nil {
@@ -255,6 +263,27 @@ func (e *Engine) reconcile(ctx context.Context, i *Intent) error {
 		e.protectionCheckedAt = e.now().UTC()
 		return e.requireAttention(i, err.Error())
 	}
+	if p.Size > parent.FillVolume {
+		// History is read before positions, so a fill can become visible between
+		// those independent reads. Only allow a short observation window when
+		// contract/direction/size AND current linked protection are consistent.
+		// The active intent blocks entries throughout; no broker mutations or
+		// immediate retry requests occur. A later normal reconciliation confirms it.
+		const reason = "position exposure differs from observed entry fills"
+		if i.AttentionRequired || i.LockReason != "" || i.RiskLockReason != "" || i.HaltReason == reason {
+			return e.requireAttention(i, reason)
+		}
+		now := e.now().UTC()
+		if i.EntryFillPendingSince.IsZero() {
+			i.EntryFillPendingSince = now
+		} else if now.Before(i.EntryFillPendingSince) || now.Sub(i.EntryFillPendingSince) >= 2*time.Second {
+			return e.requireAttention(i, reason)
+		}
+		i.State = "reconciling"
+		i.Message = "Position is ahead of reported entry fills; awaiting a fresh reconciliation. New entries blocked; positions and SL/TP untouched."
+		return e.persist(i)
+	}
+	i.EntryFillPendingSince = time.Time{}
 	i.State = "protected"
 	if parent.FillVolume < parent.Size {
 		i.State = "partial"
@@ -501,6 +530,9 @@ func (e *Engine) flattenOnOperatorRequest(ctx context.Context, i *Intent) error 
 func (e *Engine) Flatten(ctx context.Context) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	defer e.publishLocked()
+	e.runWanted = false
+	e.recoveryFlatAt = time.Time{}
 	e.disarm()
 	i := e.active()
 	if i == nil {
