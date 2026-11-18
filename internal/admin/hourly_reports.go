@@ -153,7 +153,7 @@ func automationStatusMessages(profiles []Automation, managers []risk.Profile, vi
 		}
 		// IDs are policy-validated ASCII identifiers. Never include free-form names,
 		// gateway errors, signal fields, webhook URLs or credential-bearing settings.
-		lines = append(lines, fmt.Sprintf("%s — %s | targets %d, armed %d, managing %d, recovery %d, locks %d", hourlyProfileLabel(profile.ID), state, len(ids), armed, managing, recovering, locked))
+		lines = append(lines, fmt.Sprintf("%s — %s\n> targets %d · armed %d · managing %d · recovery %d · locks %d\n", hourlyProfileLabel(profile.ID), state, len(ids), armed, managing, recovering, locked))
 	}
 	if len(lines) == 0 {
 		lines = []string{"No automation profiles configured."}

@@ -49,3 +49,9 @@ Large snapshots are split at profile boundaries into numbered parts rather than 
 The complete sanitized snapshot is durably claimed once in `hourly_automation_reports` before queueing any part. A claim is not delivery confirmation. Restart, repeated scheduler checks or changing the webhook do not resend that hour. Failed, ambiguous or overflowed sends are not automatically replayed; numbered parts make incomplete delivery visible, and queue overflow appears in report settings. Tests use temporary databases and mocked transports only; no live Discord message is sent during development.
 
 Discord payload constraints were checked against the official [webhook reference](https://github.com/discord/discord-api-docs/blob/main/developers/resources/webhook.mdx): content is limited to 2,000 characters, with explicit `allowed_mentions` and `wait=true` confirmation behavior.
+
+### Discord presentation
+
+System attention, hourly automation and daily trading reports use rich embeds with amber, blue and purple sidebars respectively. Colors identify the report category, not verified account health. Each includes a native Discord timestamp and a read-only/operator-action footer. Hourly profiles show status on one line with account counts underneath. Mentions remain disabled. Long descriptions are bounded conservatively in UTF-16 units, with an explicit shortened-report notice; existing hourly splitting and durable claims are unchanged. No delivery probe or trading action is added.
+
+Embed limits and timestamp/color fields follow the [official Discord message documentation](https://discord.com/developers/docs/resources/message#embed-object).

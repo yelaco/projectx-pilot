@@ -231,30 +231,57 @@ func (d *Discord) Run(ctx context.Context) {
 		}
 	}
 }
-func (d *Discord) send(ctx context.Context, endpoint string, r report) {
-	// Never include signals, credentials, webhook URLs or raw gateway errors.
-	text := "ProjectX Pilot — attention required\n" + r.at.Format(time.RFC3339) + "\n" + r.message + "\nAutomatic flattening is disabled. Review the local dashboard and exact account."
-	if d.daily {
-		text = "ProjectX Pilot — daily trading report\n" + r.at.Format(time.RFC3339) + "\n" + r.message + "\nRead-only report; no trading action requested."
+
+// discordPayload formats sanitized reports only. Blue is informational, never
+// evidence of healthy telemetry, verified protection or permission to trade.
+func discordPayload(r report, daily bool, healthURL string) map[string]any {
+	title, color := "attention required", 0xE5A100
+	footer := "Automatic flattening is disabled. Review the dashboard and exact account."
+	description := r.message
+	if daily {
+		title, color = "daily trading report", 0x8B5CF6
+		footer = "Read-only report; no trading action requested."
+	} else if r.kind == "automation-status" {
+		title, color = "hourly automation status", 0x3B82F6
+		footer = "Read-only snapshot • Running does not verify protection or data freshness."
+	} else if healthURL != "" {
+		description += "\n\n[System health (on your laptop)](" + healthURL + ")"
+	} else {
+		description += "\n\n**Diagnostics:** System health in your local dashboard (/system-health)."
 	}
-	if r.kind == "automation-status" {
-		text = "ProjectX Pilot — hourly automation status\n" + r.at.Format(time.RFC3339) + "\n" + r.message + "\nRead-only status snapshot; no trading action requested."
+	// Discord counts UTF-16 units. Bound the description conservatively, with a
+	// visible indicator so long reports never look complete after truncation.
+	description = discordBound(description, 3800)
+	return map[string]any{
+		"content": "**ProjectX Pilot — " + title + "**",
+		"embeds": []any{map[string]any{
+			"description": description, "color": color,
+			"timestamp": r.at.UTC().Format(time.RFC3339),
+			"footer":    map[string]string{"text": footer},
+		}},
+		"allowed_mentions": map[string]any{"parse": []string{}},
 	}
-	if !d.daily && r.kind != "automation-status" {
-		d.mu.Lock()
-		link := d.healthURL
-		d.mu.Unlock()
-		if link == "" {
-			text += "\nDiagnostics: System health in your local dashboard (/system-health)."
-		} else {
-			text += "\nSystem health (on your laptop): " + link
+}
+func discordBound(text string, limit int) string {
+	units := 0
+	for index, r := range text {
+		n := 1
+		if r > 0xFFFF {
+			n = 2
 		}
+		if units+n > limit {
+			return text[:index] + "\n… Report shortened; review the dashboard for full details."
+		}
+		units += n
 	}
-	chars := []rune(text)
-	if len(chars) > 1900 {
-		text = string(chars[:1900])
-	}
-	body, _ := json.Marshal(map[string]any{"content": text, "allowed_mentions": map[string]any{"parse": []string{}}})
+	return text
+}
+
+func (d *Discord) send(ctx context.Context, endpoint string, r report) {
+	d.mu.Lock()
+	link := d.healthURL
+	d.mu.Unlock()
+	body, _ := json.Marshal(discordPayload(r, d.daily, link))
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint+"?wait=true", bytes.NewReader(body))
 	if err != nil {
 		return

@@ -257,3 +257,41 @@ func TestHourlyStatusUsesSystemWebhookWithoutAttentionLabelOrMentions(t *testing
 		t.Fatal("disabled hourly report queued")
 	}
 }
+
+func TestDiscordEmbedsSeparateReportTypesAndBoundUnicode(t *testing.T) {
+	at := time.Date(2026, 11, 18, 10, 0, 0, 0, time.UTC)
+	for _, tc := range []struct {
+		kind   string
+		daily  bool
+		color  int
+		footer string
+	}{
+		{"", false, 0xE5A100, "Automatic flattening is disabled"},
+		{"automation-status", false, 0x3B82F6, "does not verify protection"},
+		{"", true, 0x8B5CF6, "Read-only report"},
+	} {
+		payload := discordPayload(report{kind: tc.kind, message: strings.Repeat("🙂", 3000), at: at}, tc.daily, "http://127.0.0.1:8080/system-health")
+		embed := payload["embeds"].([]any)[0].(map[string]any)
+		if embed["color"] != tc.color || embed["timestamp"] != at.Format(time.RFC3339) || !strings.Contains(embed["footer"].(map[string]string)["text"], tc.footer) {
+			t.Fatal("incorrect report presentation", payload)
+		}
+		description := embed["description"].(string)
+		units := 0
+		for _, r := range description {
+			units++
+			if r > 0xFFFF {
+				units++
+			}
+		}
+		if units > 4096 || !strings.Contains(description, "Report shortened") {
+			t.Fatal("long report exceeds Discord limit or hides truncation")
+		}
+		if len(payload["allowed_mentions"].(map[string]any)["parse"].([]string)) != 0 {
+			t.Fatal("mentions enabled")
+		}
+	}
+	p := discordPayload(report{message: "Account requires review", at: at}, false, "http://127.0.0.1:8080/system-health")
+	if !strings.Contains(p["embeds"].([]any)[0].(map[string]any)["description"].(string), "[System health (on your laptop)]") {
+		t.Fatal("diagnostic link missing")
+	}
+}
