@@ -778,7 +778,11 @@ func handler(s *app.Service, token string, m *admin.Manager) http.Handler {
 				return
 			}
 			if r.URL.Path == "/attention-settings" {
-				err := m.SaveAttention(current.ID, r.PostForm.Get("current_password"), r.PostForm.Get("enabled") == "yes", r.PostForm.Get("discord_webhook"), r.PostForm.Get("clear_webhook") == "yes")
+				hourly := []bool{}
+				if r.PostForm.Has("hourly_automation_present") {
+					hourly = append(hourly, r.PostForm.Get("hourly_automation") == "yes")
+				}
+				err := m.SaveAttention(current.ID, r.PostForm.Get("current_password"), r.PostForm.Get("enabled") == "yes", r.PostForm.Get("discord_webhook"), r.PostForm.Get("clear_webhook") == "yes", hourly...)
 				if err != nil {
 					render(w, 400, "", err.Error())
 					return

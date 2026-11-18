@@ -8,11 +8,11 @@ import (
 )
 
 func (m *Manager) AttentionStatus() attention.Status { return m.notifications.Status() }
-func (m *Manager) SaveAttention(actor, password string, enabled bool, webhook string, clear bool) error {
+func (m *Manager) SaveAttention(actor, password string, enabled bool, webhook string, clear bool, hourly ...bool) error {
 	if err := m.reauthorize(actor, password); err != nil {
 		return err
 	}
-	return m.notifications.Configure(enabled, webhook, clear)
+	return m.notifications.Configure(enabled, webhook, clear, hourly...)
 }
 func (m *Manager) openAttention() error {
 	var err error

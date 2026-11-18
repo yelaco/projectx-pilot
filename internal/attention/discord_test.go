@@ -209,3 +209,51 @@ func TestSystemReportLinksOnlyToLocalHealthChecklist(t *testing.T) {
 	})}
 	d.send(context.Background(), offlineHook, report{message: "Account #42: test attention", generation: d.generation, at: time.Now()})
 }
+
+func TestHourlyStatusUsesSystemWebhookWithoutAttentionLabelOrMentions(t *testing.T) {
+	d := openTest(t)
+	if err := d.Configure(true, offlineHook, false); err != nil {
+		t.Fatal(err)
+	}
+	if d.EnqueueAutomationStatus("paused profiles") {
+		t.Fatal("hourly reports not opt-in")
+	}
+	if err := d.Configure(true, "", false, true); err != nil {
+		t.Fatal(err)
+	}
+	if !d.EnqueueAutomationStatus("`profile` — PAUSED") {
+		t.Fatal("enabled hourly report not queued")
+	}
+	d.client = &http.Client{Transport: roundTrip(func(req *http.Request) (*http.Response, error) {
+		var body struct {
+			Content         string `json:"content"`
+			AllowedMentions struct {
+				Parse []string `json:"parse"`
+			} `json:"allowed_mentions"`
+		}
+		if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(body.Content, "hourly automation status") || strings.Contains(body.Content, "attention required") || strings.Contains(body.Content, "daily trading report") || len(body.AllowedMentions.Parse) != 0 {
+			t.Error("hourly report mislabeled or can mention users", body.Content)
+		}
+		if len([]rune(body.Content)) > 2000 || req.URL.Query().Get("wait") != "true" {
+			t.Error("invalid webhook payload")
+		}
+		return &http.Response{StatusCode: 200, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(`{}`))}, nil
+	})}
+	d.send(context.Background(), offlineHook, <-d.queue)
+	if d.Status().LastSent.IsZero() {
+		t.Fatal("confirmed status delivery not recorded")
+	}
+	reopened, err := Open(d.path)
+	if err != nil || !reopened.Status().HourlyAutomation {
+		t.Fatal("hourly setting lost on restart", err)
+	}
+	if err = d.Configure(true, "", false); err != nil || !d.Status().HourlyAutomation {
+		t.Fatal("older client erased hourly preference")
+	}
+	if err = d.Configure(true, "", false, false); err != nil || d.EnqueueAutomationStatus("new report") {
+		t.Fatal("disabled hourly report queued")
+	}
+}

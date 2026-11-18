@@ -465,8 +465,9 @@ func (m *Manager) processFleet(ctx context.Context) error {
 func (m *Manager) runExecutionFleet(ctx context.Context) {
 	var wg sync.WaitGroup
 	if m.notifications != nil {
-		wg.Add(1)
+		wg.Add(2)
 		go func() { defer wg.Done(); m.notifications.Run(ctx) }()
+		go func() { defer wg.Done(); m.runHourlyAutomationReports(ctx) }()
 	}
 	if m.tradingReports != nil {
 		wg.Add(2)

@@ -117,7 +117,7 @@ function updateRunnerLock(row,runner) {
 }
 function updateReportStatus(channel,status){
  if(!status)return;
- const summary=document.querySelector('[data-report-summary="'+channel+'"]');if(summary)summary.textContent=(status.Configured?'Webhook saved.':'No webhook configured.')+' '+(status.Enabled?'Reports enabled.':'Reports disabled.');
+ const summary=document.querySelector('[data-report-summary="'+channel+'"]');if(summary)summary.textContent=(status.Configured?'Webhook saved.':'No webhook configured.')+' '+(status.Enabled?'Reports enabled.':'Reports disabled.')+(channel==='system'&&status.HourlyAutomation?' Hourly automation status selected.':'');
  const error=document.querySelector('[data-report-error="'+channel+'"]');if(error){error.textContent=status.LastError || '';error.hidden=!status.LastError;}
  const last=document.querySelector('[data-report-last="'+channel+'"]');if(last)last.textContent=status.LastSent&&!status.LastSent.startsWith('0001')?'Last confirmed delivery: '+status.LastSent+' UTC':'No confirmed delivery yet.';
  const dropped=document.querySelector('[data-report-dropped="'+channel+'"]');if(dropped){dropped.textContent=(status.Dropped || 0)+' reports could not be queued earlier in this process (history).';dropped.hidden=!status.Dropped;}

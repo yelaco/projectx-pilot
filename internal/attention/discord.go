@@ -23,16 +23,19 @@ import (
 )
 
 type Settings struct {
-	Enabled bool   `json:"enabled"`
-	URL     string `json:"webhook_url"`
+	HourlyAutomation bool   `json:"hourly_automation,omitempty"`
+	Enabled          bool   `json:"enabled"`
+	URL              string `json:"webhook_url"`
 }
 type Status struct {
+	HourlyAutomation    bool
 	Enabled, Configured bool
 	LastError           string
 	LastSent            time.Time
 	Dropped             int
 }
 type report struct {
+	kind       string
 	message    string
 	generation uint64
 	at         time.Time
@@ -112,10 +115,16 @@ func (d *Discord) SetLocalDashboard(listen string) error {
 	d.mu.Unlock()
 	return nil
 }
-func (d *Discord) Configure(enabled bool, raw string, clear bool) error {
+func (d *Discord) Configure(enabled bool, raw string, clear bool, hourly ...bool) error {
+	if len(hourly) > 1 {
+		return errors.New("select one hourly report setting")
+	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	next := d.settings
+	if len(hourly) == 1 {
+		next.HourlyAutomation = hourly[0]
+	}
 	if clear {
 		next.URL = ""
 	}
@@ -146,6 +155,7 @@ func (d *Discord) Status() Status {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	s := d.status
+	s.HourlyAutomation = d.settings.HourlyAutomation
 	s.Enabled = d.settings.Enabled
 	s.Configured = d.settings.URL != ""
 	return s
@@ -155,14 +165,18 @@ func (d *Discord) Status() Status {
 func (d *Discord) Publish(message string) { d.Enqueue(message) }
 
 // Enqueue reports whether this best-effort message entered the bounded queue.
-func (d *Discord) Enqueue(message string) bool {
+func (d *Discord) EnqueueAutomationStatus(message string) bool {
+	return d.enqueue(message, "automation-status")
+}
+func (d *Discord) Enqueue(message string) bool { return d.enqueue(message, "") }
+func (d *Discord) enqueue(message, kind string) bool {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	if !d.settings.Enabled || d.suspended {
+	if !d.settings.Enabled || d.suspended || kind == "automation-status" && (!d.settings.HourlyAutomation || d.daily) {
 		return false
 	}
 	now := time.Now().UTC()
-	key := sha256.Sum256([]byte(message))
+	key := sha256.Sum256([]byte(kind + "\x00" + message))
 	if at, ok := d.seen[key]; ok && now.Sub(at) < 5*time.Minute {
 		return false
 	}
@@ -177,7 +191,7 @@ func (d *Discord) Enqueue(message string) bool {
 			return false
 		}
 	}
-	r := report{message: message, generation: d.generation, at: now}
+	r := report{kind: kind, message: message, generation: d.generation, at: now}
 	select {
 	case d.queue <- r:
 		d.seen[key] = now
@@ -223,7 +237,10 @@ func (d *Discord) send(ctx context.Context, endpoint string, r report) {
 	if d.daily {
 		text = "ProjectX Pilot — daily trading report\n" + r.at.Format(time.RFC3339) + "\n" + r.message + "\nRead-only report; no trading action requested."
 	}
-	if !d.daily {
+	if r.kind == "automation-status" {
+		text = "ProjectX Pilot — hourly automation status\n" + r.at.Format(time.RFC3339) + "\n" + r.message + "\nRead-only status snapshot; no trading action requested."
+	}
+	if !d.daily && r.kind != "automation-status" {
 		d.mu.Lock()
 		link := d.healthURL
 		d.mu.Unlock()
