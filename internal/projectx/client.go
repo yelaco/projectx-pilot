@@ -34,11 +34,12 @@ type result struct {
 	ErrorCode    int    `json:"errorCode"`
 }
 type Account struct {
-	ID        int64   `json:"id"`
-	Name      string  `json:"name"`
-	Balance   float64 `json:"balance"`
-	CanTrade  bool    `json:"canTrade"`
-	IsVisible bool    `json:"isVisible"`
+	BalanceKnown bool    `json:"-"`
+	ID           int64   `json:"id"`
+	Name         string  `json:"name"`
+	Balance      float64 `json:"balance"`
+	CanTrade     bool    `json:"canTrade"`
+	IsVisible    bool    `json:"isVisible"`
 	// nil means the gateway omitted this field; never infer simulated status.
 	Simulated *bool `json:"simulated"`
 }

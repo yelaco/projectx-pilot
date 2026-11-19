@@ -18,6 +18,7 @@ import (
 	"github.com/yelaco/projectx-pilot/internal/dashboard"
 	"github.com/yelaco/projectx-pilot/internal/notify"
 	"github.com/yelaco/projectx-pilot/internal/observability"
+	"github.com/yelaco/projectx-pilot/internal/publicstatus"
 	"github.com/yelaco/projectx-pilot/internal/storage"
 	"github.com/yelaco/projectx-pilot/internal/tunnel"
 )
@@ -102,7 +103,17 @@ func run() error {
 	srv := &http.Server{Addr: c.DashboardListen, Handler: dashboardHandler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 45 * time.Second, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 8192}
 	done := make(chan struct{})
 	go func() { defer close(done); service.Run(ctx, c.RefreshInterval, log) }()
-	failures := make(chan error, 1)
+	failures := make(chan error, 2)
+	var publicServer *http.Server
+	if c.PublicStatusListen != "" {
+		publicServer = &http.Server{Addr: c.PublicStatusListen, Handler: publicstatus.Handler(manager.PublicSnapshot), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 10 * time.Second, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 8192}
+		go func() {
+			if e := publicServer.ListenAndServe(); e != nil && !errors.Is(e, http.ErrServerClosed) {
+				log.Warn("Public status listener unavailable; trading services unchanged")
+			}
+		}()
+	}
+
 	go func() { failures <- srv.ListenAndServe() }()
 	log.Info("ProjectX Pilot started", "listen", c.DashboardListen, "execution_enabled", false, "password_file", *stateDir+"/admin-password")
 	select {
@@ -116,6 +127,11 @@ func run() error {
 	stopCtx, stop := context.WithTimeout(context.Background(), 5*time.Second)
 	defer stop()
 	shutdownErr := srv.Shutdown(stopCtx)
+	if publicServer != nil {
+		if e := publicServer.Shutdown(stopCtx); shutdownErr == nil {
+			shutdownErr = e
+		}
+	}
 	<-done
 	if err != nil {
 		return err

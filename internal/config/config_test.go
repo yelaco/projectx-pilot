@@ -102,3 +102,14 @@ func TestRemoteDashboardRequiresCompleteExactAccessScope(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestPublicStatusListenerIsSeparateAndLoopbackOnly(t *testing.T) {
+	for _, addr := range []string{"0.0.0.0:8091", "localhost:8091", "127.0.0.1:8080", "127.0.0.1:8090", "127.0.0.1:0"} {
+		if _, err := loadText(t, "public_status_listen: "+addr+"\n"); err == nil {
+			t.Fatal("unsafe public listener", addr)
+		}
+	}
+	if _, err := loadText(t, "public_status_listen: 127.0.0.1:8091\n"); err != nil {
+		t.Fatal(err)
+	}
+}

@@ -28,6 +28,7 @@ import (
 	"github.com/yelaco/projectx-pilot/internal/lockreview"
 	"github.com/yelaco/projectx-pilot/internal/news"
 	"github.com/yelaco/projectx-pilot/internal/projectx"
+	"github.com/yelaco/projectx-pilot/internal/publicstatus"
 	"github.com/yelaco/projectx-pilot/internal/realtime"
 	"github.com/yelaco/projectx-pilot/internal/risk"
 	"github.com/yelaco/projectx-pilot/internal/session"
@@ -45,6 +46,8 @@ var stylesheet string
 var page = template.Must(template.New("admin").ParseFS(templateFiles, "admin.html", "pages/*.html"))
 
 type view struct {
+	PublicSettings                                                           publicstatus.Settings
+	PublicAccounts                                                           []admin.PublicAccountChoice
 	LocalLockPolicy                                                          lockreview.Info
 	FaultRecoveryCandidates                                                  []execution.Intent
 	TradingReports                                                           attention.Status
@@ -170,6 +173,7 @@ func handler(s *app.Service, token string, m *admin.Manager) http.Handler {
 			v := view{StaleQuoteConfirmation: staleQuoteConfirmation, StaleQuoteConfirmationAction: r.URL.Path, ManagerSchedule: session.DefaultSchedule(), Current: current.Info, Page: name, Nav: nav, Title: title, Subtitle: subtitle, State: s.Snapshot(), Editable: m != nil, CSRF: csrf, Notice: notice, Error: message}
 			if m != nil {
 				v.Settings = m.Settings()
+				v.PublicSettings, v.PublicAccounts = m.PublicSettings()
 				v.Attention = m.AttentionStatus()
 				v.TradingReports = m.TradingReportStatus()
 				v.NewsStatus = m.NewsStatus()
@@ -447,7 +451,7 @@ func handler(s *app.Service, token string, m *admin.Manager) http.Handler {
 			return
 		}
 		if r.Method == http.MethodPost {
-			if m == nil || (!strings.HasPrefix(r.URL.Path, "/fleet/") && r.URL.Path != "/news-refresh" && r.URL.Path != "/operation-days" && r.URL.Path != "/settings" && r.URL.Path != "/attention-settings" && r.URL.Path != "/trading-report-settings" && r.URL.Path != "/refresh" && r.URL.Path != "/account-permission" && r.URL.Path != "/automation" && r.URL.Path != "/automation-delete" && r.URL.Path != "/signal-import" && r.URL.Path != "/signal-review" && r.URL.Path != "/delivery-import" && r.URL.Path != "/delivery-reject" && r.URL.Path != "/ingress" && r.URL.Path != "/mapping" && r.URL.Path != "/admin-access" && r.URL.Path != "/trade-manager" && r.URL.Path != "/trade-manager-delete" && r.URL.Path != "/automation-execution" && !profileExecutionAction(r.URL.Path) && !executionAction(r.URL.Path)) {
+			if m == nil || (!strings.HasPrefix(r.URL.Path, "/fleet/") && r.URL.Path != "/news-refresh" && r.URL.Path != "/operation-days" && r.URL.Path != "/settings" && r.URL.Path != "/public-status-settings" && r.URL.Path != "/attention-settings" && r.URL.Path != "/trading-report-settings" && r.URL.Path != "/refresh" && r.URL.Path != "/account-permission" && r.URL.Path != "/automation" && r.URL.Path != "/automation-delete" && r.URL.Path != "/signal-import" && r.URL.Path != "/signal-review" && r.URL.Path != "/delivery-import" && r.URL.Path != "/delivery-reject" && r.URL.Path != "/ingress" && r.URL.Path != "/mapping" && r.URL.Path != "/admin-access" && r.URL.Path != "/trade-manager" && r.URL.Path != "/trade-manager-delete" && r.URL.Path != "/automation-execution" && !profileExecutionAction(r.URL.Path) && !executionAction(r.URL.Path)) {
 				http.Error(w, "method not allowed", 405)
 				return
 			}
@@ -772,6 +776,34 @@ func handler(s *app.Service, token string, m *admin.Manager) http.Handler {
 				err := m.SaveTradingReports(current.ID, r.PostForm.Get("current_password"), r.PostForm.Get("enabled") == "yes", r.PostForm.Get("discord_webhook"), r.PostForm.Get("clear_webhook") == "yes")
 				if err != nil {
 					render(w, 400, "", err.Error())
+					return
+				}
+				http.Redirect(w, r, "/settings", http.StatusSeeOther)
+				return
+			}
+			if r.URL.Path == "/public-status-settings" {
+				settings := publicstatus.Settings{Enabled: r.PostForm.Get("enabled") == "yes", Origin: strings.TrimSpace(r.PostForm.Get("origin"))}
+				for _, raw := range r.PostForm["public_account"] {
+					id, e := strconv.ParseInt(raw, 10, 64)
+					if e != nil {
+						render(w, 400, "", "Invalid publication account")
+						return
+					}
+					row := publicstatus.AccountConfig{AccountID: id, Alias: strings.TrimSpace(r.PostForm.Get("alias_" + raw)), Since: r.PostForm.Get("since_" + raw), LifetimeConfirmed: r.PostForm.Get("lifetime_"+raw) == "yes"}
+					for key, target := range map[string]**float64{"balance_": &row.StartingBalance, "adjustments_": &row.NetAdjustments} {
+						if value := strings.TrimSpace(r.PostForm.Get(key + raw)); value != "" {
+							n, e := strconv.ParseFloat(value, 64)
+							if e != nil {
+								render(w, 400, "", "Invalid lifetime balance or adjustment")
+								return
+							}
+							*target = &n
+						}
+					}
+					settings.Accounts = append(settings.Accounts, row)
+				}
+				if e := m.SavePublicStatus(current.ID, r.PostForm.Get("current_password"), settings); e != nil {
+					render(w, 400, "", e.Error())
 					return
 				}
 				http.Redirect(w, r, "/settings", http.StatusSeeOther)

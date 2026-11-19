@@ -65,6 +65,7 @@ func (r RemoteDashboard) Validate() error {
 }
 
 type Config struct {
+	PublicStatusListen       string              `yaml:"public_status_listen,omitempty"`
 	RemoteDashboard          RemoteDashboard     `yaml:"remote_dashboard,omitempty"`
 	TradeManagerNoTradeDates map[string][]string `yaml:"trade_manager_no_trade_dates,omitempty"`
 	NoTradeDates             []string            `yaml:"no_trade_dates,omitempty"`
@@ -111,6 +112,16 @@ func Load(path string) (Config, error) {
 }
 
 func (c Config) Validate() error {
+	if c.PublicStatusListen != "" {
+		host, port, err := net.SplitHostPort(c.PublicStatusListen)
+		n, e := strconv.Atoi(port)
+		_, adminPort, _ := net.SplitHostPort(c.DashboardListen)
+		adminNumber, _ := strconv.Atoi(adminPort)
+		if err != nil || e != nil || host != "127.0.0.1" || n < 1 || n > 65535 || n == adminNumber || n == 8090 {
+			return errors.New("public status must use a separate loopback port, excluding webhook port 8090")
+		}
+	}
+
 	if err := c.RemoteDashboard.Validate(); err != nil {
 		return err
 	}

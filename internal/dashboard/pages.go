@@ -94,7 +94,7 @@ func actionPage(path, id string) string {
 		return "/settings/webhooks"
 	case "/admin-access":
 		return "/settings/access"
-	case "/settings", "/attention-settings", "/trading-report-settings":
+	case "/settings", "/public-status-settings", "/attention-settings", "/trading-report-settings":
 		return "/settings"
 	default:
 		return "/"

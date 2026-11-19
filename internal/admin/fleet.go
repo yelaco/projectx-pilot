@@ -464,6 +464,8 @@ func (m *Manager) processFleet(ctx context.Context) error {
 // runtime coordinates manual recovery and all account-specific automatic monitors.
 func (m *Manager) runExecutionFleet(ctx context.Context) {
 	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() { defer wg.Done(); m.runPublicStatus(ctx) }()
 	if m.notifications != nil {
 		wg.Add(2)
 		go func() { defer wg.Done(); m.notifications.Run(ctx) }()

@@ -11,3 +11,7 @@ signal_max_age: 5m # import and manual execution freshness; not execution author
 
 # Block US FOMC policy-event sessions using Forex Factory; use off to disable.
 news_filter: us_fomc
+
+# Optional isolated public trading status listener. Publication remains separately
+# disabled until password-confirmed in Settings. Never use the admin/webhook port.
+# public_status_listen: 127.0.0.1:8091
