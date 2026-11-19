@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-//go:embed page.html status.css status.js
+//go:embed page.html status.css status.js install.js manifest.webmanifest icon-192.png icon-512.png
 var assets embed.FS
 var page = template.Must(template.New("public").ParseFS(assets, "page.html"))
 
@@ -18,7 +18,7 @@ func serve(w http.ResponseWriter, r *http.Request, source func() (Settings, Snap
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	w.Header().Set("X-Robots-Tag", "noindex, nofollow, noarchive")
-	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'self'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'self'; script-src 'self'; connect-src 'self'; img-src 'self'; manifest-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
 	settings, snap := source()
 	u, _ := url.Parse(settings.Origin)
 	if !settings.Enabled || u == nil || r.Host != u.Host {
@@ -32,11 +32,17 @@ func serve(w http.ResponseWriter, r *http.Request, source func() (Settings, Snap
 	}
 	path := r.URL.Path
 	switch path {
-	case "/status.css", "/status.js":
+	case "/status.css", "/status.js", "/install.js", "/manifest.webmanifest", "/icon-192.png", "/icon-512.png":
 		data, _ := assets.ReadFile(strings.TrimPrefix(path, "/"))
 		ct := "text/css; charset=utf-8"
-		if path == "/status.js" {
+		if path == "/status.js" || path == "/install.js" {
 			ct = "application/javascript; charset=utf-8"
+		}
+		if path == "/manifest.webmanifest" {
+			ct = "application/manifest+json"
+		}
+		if strings.HasSuffix(path, ".png") {
+			ct = "image/png"
 		}
 		w.Header().Set("Content-Type", ct)
 		if r.Method != http.MethodHead {
